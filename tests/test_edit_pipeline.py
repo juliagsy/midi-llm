@@ -48,7 +48,7 @@ def test_copy_source_baseline(sample_midi, tmp_path: Path):
     assert row["item_id"] == "t1"
 
 
-def test_copy_source_isolates_missing_midi(tmp_path: Path):
+def test_copy_source_isolates_missing_midi(sample_midi, tmp_path: Path):
     manifest = tmp_path / "mini.jsonl"
     rows = [
         {
@@ -64,13 +64,29 @@ def test_copy_source_isolates_missing_midi(tmp_path: Path):
             "instruction": "x",
         },
     ]
+    (tmp_path / "in.mid").write_bytes(sample_midi.read_bytes())
     manifest.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
 
     preds = tmp_path / "preds.jsonl"
     result = copy_source_as_baseline(manifest, preds, split="test")
-    assert result.n_written == 0
-    assert result.n_failed == 2
+    assert result.n_written == 1
+    assert result.n_failed == 1
     assert (tmp_path / "copy_source_failures.jsonl").is_file()
+
+
+def test_copy_source_raises_when_all_missing(tmp_path: Path):
+    import pytest
+
+    manifest = tmp_path / "mini.jsonl"
+    record = {
+        "item_id": "bad",
+        "split": "test",
+        "midi_in": "missing.mid",
+        "instruction": "x",
+    }
+    manifest.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="zero predictions"):
+        copy_source_as_baseline(manifest, tmp_path / "preds.jsonl", split="test")
 
 
 def test_iter_manifest_records(tmp_path: Path):

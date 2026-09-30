@@ -12,6 +12,7 @@ from typing import Any
 from midi_llm.data.jsonl_io import MANIFEST_FIELDS, iter_jsonl
 from midi_llm.eval.musicinstruct_runner import predictions_from_completions, run_musicinstruct_eval
 from midi_llm.infer.edit import run_edit_inference
+from midi_llm.infer.preflight import preflight_manifest
 
 
 @dataclass
@@ -132,10 +133,17 @@ def copy_source_as_baseline(
     output_predictions: str | Path,
     *,
     split: str = "test",
+    max_items: int | None = None,
     failures_path: str | Path | None = None,
 ) -> CopySourceResult:
     """Zero-edit baseline: predict midi_in unchanged (sanity / lower bound)."""
     manifest = Path(manifest_path)
+    preflight_manifest(
+        manifest_path,
+        split=split,
+        max_items=max_items,
+        fail_on_missing=False,
+    )
     root = manifest.parent
     predictions_root = Path(output_predictions).parent
     out_dir = predictions_root / "copy_source_midis"
@@ -148,6 +156,7 @@ def copy_source_as_baseline(
     with Path(output_predictions).open("w", encoding="utf-8") as dst, fail_path.open(
         "w", encoding="utf-8"
     ) as fail_writer:
+        written_limit = max_items
         for line_no, record in iter_jsonl(
             manifest,
             required_fields=MANIFEST_FIELDS,
@@ -156,6 +165,8 @@ def copy_source_as_baseline(
             if split is not None and record.get("split") != split:
                 result.n_skipped += 1
                 continue
+            if written_limit is not None and result.n_written >= written_limit:
+                break
             src_midi = root / record["midi_in"]
             dest = out_dir / f"{record['item_id']}.mid"
             if not src_midi.is_file():
@@ -184,4 +195,9 @@ def copy_source_as_baseline(
             rel = dest.relative_to(predictions_root)
             dst.write(json.dumps({"item_id": record["item_id"], "midi_path": str(rel)}) + "\n")
             result.n_written += 1
+
+    if result.n_written == 0:
+        raise RuntimeError(
+            f"copy-source baseline wrote zero predictions for split={split!r} in {manifest}"
+        )
     return result

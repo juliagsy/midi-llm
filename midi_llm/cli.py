@@ -182,7 +182,12 @@ def _cmd_eval_edit(args: argparse.Namespace) -> int:
         out = Path(args.output_dir)
         out.mkdir(parents=True, exist_ok=True)
         preds = out / "predictions.jsonl"
-        copy_result = copy_source_as_baseline(args.manifest, preds, split=args.split)
+        copy_result = copy_source_as_baseline(
+            args.manifest,
+            preds,
+            split=args.split,
+            max_items=args.max_items,
+        )
         from midi_llm.eval.musicinstruct_runner import run_musicinstruct_eval
 
         results_path = out / "results.json"

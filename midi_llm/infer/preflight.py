@@ -25,6 +25,7 @@ def preflight_manifest(
     *,
     split: str | None = "test",
     max_items: int | None = None,
+    fail_on_missing: bool = True,
 ) -> ManifestPreflightReport:
     """Check that manifest rows reference existing ``midi_in`` files."""
     manifest = Path(manifest_path)
@@ -51,7 +52,7 @@ def preflight_manifest(
             f"manifest preflight found zero items for split={split!r} in {manifest}"
         )
 
-    if missing:
+    if missing and fail_on_missing:
         preview = ", ".join(missing[:5])
         suffix = "..." if len(missing) > 5 else ""
         raise FileNotFoundError(
@@ -61,8 +62,8 @@ def preflight_manifest(
 
     return ManifestPreflightReport(
         n_items=count,
-        n_missing_midi_in=0,
-        missing_paths=(),
+        n_missing_midi_in=len(missing),
+        missing_paths=tuple(missing),
     )
 
 
