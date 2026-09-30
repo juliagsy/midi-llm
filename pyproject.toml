@@ -1,0 +1,49 @@
+[project]
+name = "midi-llm"
+version = "0.1.0"
+description = "Controlled comparison of symbolic MIDI representations for LLM-native text↔MIDI and editing"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pretty_midi>=0.2.10",
+    "pydantic>=2.7",
+    "numpy>=1.26",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+repr = ["miditok>=3.0", "symusic>=0.5", "music21>=9.0"]
+amt = [
+    "anticipation @ git+https://github.com/jthickstun/anticipation.git",
+    "mido>=1.3",
+]
+data = ["datasets>=2.14"]
+train = [
+    "torch>=2.2",
+    "transformers>=4.44",
+    "accelerate>=0.33",
+    "peft>=0.12",
+    "datasets>=2.14",
+]
+dev = ["pytest>=8", "ruff>=0.6"]
+all = ["midi-llm[repr,amt,data,train,dev]"]
+
+[project.scripts]
+midi-llm = "midi_llm.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["midi_llm"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
