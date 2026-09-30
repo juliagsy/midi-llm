@@ -1,4 +1,5 @@
-# REMI+ arm via MidiTok
+# REMI+ arm via MidiTok — serialized token IDs through native Llama BPE
 representation: remi
-vocab_extension: true
+vocab_extension: false
+tokenizer_mode: bpe_text
 approx_vocab_size: 8000

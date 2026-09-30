@@ -1,4 +1,6 @@
-# ABC text arm — no vocabulary extension
+# ABC text arm — disabled until real MIDI↔ABC conversion is implemented
 representation: abc
+enabled: false
 vocab_extension: false
-tokenizer: null  # native Llama tokenizer at train time
+tokenizer_mode: bpe_text
+tokenizer: null

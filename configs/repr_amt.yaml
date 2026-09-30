@@ -1,5 +1,4 @@
-# AMT arrival-time arm (MIDI-LLM compatible)
+# AMT arm — serialized token IDs through native Llama BPE
 representation: amt
-vocab_extension: true
-approx_vocab_size: 55030
-tokens_per_note: 3
+vocab_extension: false
+tokenizer_mode: bpe_text

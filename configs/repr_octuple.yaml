@@ -1,5 +1,4 @@
-# Octuple compound-token arm via MidiTok
+# Octuple arm — serialized token IDs through native Llama BPE
 representation: octuple
-vocab_extension: true
-approx_vocab_size: 10000
-tokens_per_note: 1
+vocab_extension: false
+tokenizer_mode: bpe_text

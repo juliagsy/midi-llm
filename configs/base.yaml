@@ -1,4 +1,7 @@
 # Shared hyperparameters for all representation arms (Paper 2 protocol)
+#
+# Token protocol (v0): space-separated MIDI token IDs in text, encoded with the
+# native Llama BPE tokenizer (no embedding resize). See tokenizer_mode in repr_*.yaml.
 
 model:
   backbone: meta-llama/Llama-3.2-1B-Instruct

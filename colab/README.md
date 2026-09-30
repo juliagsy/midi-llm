@@ -12,7 +12,7 @@ Notebooks for **Paper 2** LoRA editing experiments on a Colab **T4** (~16 GB VRA
 
 | Notebook | Purpose |
 |----------|---------|
-| `01_setup_and_data.ipynb` | Clone repos, install deps, HF login, build edit shards |
+| `01_setup_and_data.ipynb` | Clone repos, install deps, HF login, build S3 edit shards (3 arms) |
 | `02_train_lora_sft.ipynb` | LoRA SFT (Stage S3) for one or all representation arms |
 | `03_eval_musicinstruct.ipynb` | Infer on test split, decode MIDI, score with MIDI-Instruct |
 
