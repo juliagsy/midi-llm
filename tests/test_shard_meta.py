@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from midi_llm.midi_repr.registry import RepresentationDisabledError
 from midi_llm.train.shard_meta import infer_repr_name_from_shard, resolve_repr_name
 
 
@@ -43,3 +44,10 @@ def test_resolve_repr_name_conflict(tmp_path: Path):
     _write_shard(shard, "remi")
     with pytest.raises(ValueError, match="conflicts"):
         resolve_repr_name(shard, "octuple")
+
+
+def test_resolve_repr_name_rejects_disabled_arm(tmp_path: Path):
+    shard = tmp_path / "edit.jsonl"
+    _write_shard(shard, "abc")
+    with pytest.raises(RepresentationDisabledError):
+        resolve_repr_name(shard, "abc")

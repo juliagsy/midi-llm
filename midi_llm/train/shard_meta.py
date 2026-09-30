@@ -6,6 +6,7 @@ from pathlib import Path
 
 from midi_llm.config import load_config
 from midi_llm.data.jsonl_io import SFT_FIELDS, iter_jsonl
+from midi_llm.midi_repr.registry import DISABLED_REPR_NAMES, RepresentationDisabledError
 
 
 def infer_repr_name_from_shard(shard_path: str | Path) -> str | None:
@@ -20,7 +21,17 @@ def infer_repr_name_from_shard(shard_path: str | Path) -> str | None:
 
 def validate_repr_protocol(repr_name: str) -> None:
     """Ensure the representation config matches the documented BPE-text protocol."""
+    key = repr_name.lower().strip()
+    if key in DISABLED_REPR_NAMES:
+        raise RepresentationDisabledError(
+            f"representation {repr_name!r} is disabled in protocol validation"
+        )
+
     cfg = load_config(repr_name)
+    if cfg.get("enabled") is False:
+        raise RepresentationDisabledError(
+            f"representation {repr_name!r} is disabled (enabled: false in repr config)"
+        )
     if cfg.get("vocab_extension"):
         raise ValueError(
             f"representation {repr_name!r} requests vocab_extension=true but training uses "
