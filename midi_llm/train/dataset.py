@@ -60,9 +60,13 @@ class SFTJsonlDataset(Dataset):
         completion = row.get("completion", "")
         if self.chat_template:
             parts = format_llama_instruct(prompt, completion)
-            return {
-                "text": parts["prompt"] + parts["completion"],
-                "prompt": parts["prompt"],
-                "completion": parts["completion"],
-            }
-        return {"text": format_example(prompt, completion), "prompt": prompt, "completion": completion}
+            prompt_text = parts["prompt"]
+            completion_text = parts["completion"]
+        else:
+            prompt_text = prompt
+            completion_text = completion
+        return {
+            "text": prompt_text + completion_text,
+            "prompt": prompt_text,
+            "completion": completion_text,
+        }

@@ -21,17 +21,53 @@ def _require_train_deps():
     return torch, LoraConfig, TaskType, get_peft_model, AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
 
 
+MIN_COMPLETION_TOKENS = 8
+
+
+def _tokenize_sft_example(
+    tokenizer,
+    *,
+    prompt: str,
+    completion: str,
+    max_seq_len: int,
+) -> tuple[list[int], list[int]]:
+    """Tokenize one SFT row, reserving completion tokens when truncating."""
+    prompt_ids = tokenizer(prompt, add_special_tokens=False)["input_ids"]
+    completion_ids = tokenizer(completion, add_special_tokens=False)["input_ids"]
+
+    max_prompt_len = max(0, max_seq_len - MIN_COMPLETION_TOKENS)
+    if len(prompt_ids) > max_prompt_len:
+        prompt_ids = prompt_ids[-max_prompt_len:]
+
+    ids = prompt_ids + completion_ids
+    if len(ids) > max_seq_len:
+        overflow = len(ids) - max_seq_len
+        if overflow >= len(completion_ids):
+            completion_ids = []
+            ids = prompt_ids[-max_seq_len:]
+        else:
+            completion_ids = completion_ids[:-overflow]
+            ids = prompt_ids + completion_ids
+
+    prompt_len = len(ids) - len(completion_ids)
+    label = ids.copy()
+    label[:prompt_len] = [-100] * prompt_len
+    if not any(token != -100 for token in label):
+        raise ValueError("SFT example produced all-masked labels after truncation")
+    return ids, label
+
+
 def _tokenize_batch(examples: dict[str, list[str]], tokenizer, max_seq_len: int) -> dict[str, Any]:
     torch, *_ = _require_train_deps()
     input_ids = []
     labels = []
-    for text, prompt in zip(examples["text"], examples["prompt"], strict=True):
-        full = tokenizer(text, truncation=True, max_length=max_seq_len, add_special_tokens=False)
-        prompt_ids = tokenizer(prompt, truncation=True, max_length=max_seq_len, add_special_tokens=False)
-        ids = full["input_ids"]
-        label = ids.copy()
-        prompt_len = min(len(prompt_ids["input_ids"]), len(ids))
-        label[:prompt_len] = [-100] * prompt_len
+    for prompt, completion in zip(examples["prompt"], examples["completion"], strict=True):
+        ids, label = _tokenize_sft_example(
+            tokenizer,
+            prompt=prompt,
+            completion=completion,
+            max_seq_len=max_seq_len,
+        )
         input_ids.append(ids)
         labels.append(label)
 
@@ -60,8 +96,8 @@ class _SFTCollator:
 
     def __call__(self, batch: list[dict[str, str]]) -> dict[str, Any]:
         merged = {
-            "text": [row["text"] for row in batch],
             "prompt": [row["prompt"] for row in batch],
+            "completion": [row["completion"] for row in batch],
         }
         return _tokenize_batch(merged, self.tokenizer, self.max_seq_len)
 
