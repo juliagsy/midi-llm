@@ -1,8 +1,10 @@
 # midi-llm
 
-Controlled comparison of **ABC**, **REMI+**, **AMT (MIDI-like)**, and **Octuple** representations inside a unified LLM training and evaluation pipeline (Paper 2).
+Controlled comparison of **REMI+**, **AMT (MIDI-like)**, and **Octuple** representations inside a unified LLM training and evaluation pipeline (Paper 2). **ABC is disabled** until a real MIDI↔ABC converter is implemented.
 
-Evaluates **understanding**, **text→MIDI generation**, and **instruction editing** (via [MIDI-Instruct](https://github.com/juliagsy/musicinstruct)).
+**Paper 2 scope (implemented):** Stage S3 LoRA editing on MIDI-Instruct, with infer → decode → `musicinstruct score`.
+
+**Deferred:** captioning / text→MIDI generation metrics (FAD, CLAP), S1 domain CPT, vocab extension.
 
 ## Google Colab (T4)
 
@@ -23,80 +25,99 @@ pip install -e ".[repr,dev]"
 pip install "git+https://github.com/jthickstun/anticipation.git" mido
 # or: pip install -e ".[amt]"
 
-# Training (later phases)
+# Training + BPE token stats (Llama tokenizer)
 pip install -e ".[train]"
 
-# Evaluation against MIDI-Instruct benchmark
+# Evaluation against MIDI-Instruct benchmark (optional; not required for unit tests)
 pip install -e ../musicinstruct
 ```
 
 ## Quick start
 
 ```bash
-# Token stats and round-trip check on a MIDI file
+# Round-trip fidelity check on a MIDI file
 midi-llm roundtrip path/to/file.mid --repr remi
 
-# Compare all representations on one file
+# Representation + Llama BPE token counts (comparable across arms)
 midi-llm token-stats path/to/file.mid
+midi-llm token-stats path/to/file.mid --json
 
 # Build SFT JSONL from a MIDI-Instruct manifest (train split)
 midi-llm build-instruct-shard \
   ../musicinstruct/data/pilot/pilot.jsonl \
-  --repr abc \
-  --output data/shards/instruct_abc.jsonl \
+  --repr remi \
+  --output data/shards/instruct_remi.jsonl \
   --split train
 
-# Stage S0 from local MIDIs or GigaMIDI (HF, no Lakh)
-midi-llm build-syntax-shard ../musicinstruct/data/pilot/seeds \
-  --repr remi --output data/shards/syntax_remi.jsonl
+# Stage S0 from local MIDIs or GigaMIDI (HF)
+midi-llm build-syntax-shard path/to/midis --repr remi --output data/shards/syntax_remi.jsonl
 pip install -e ".[data]"
 midi-llm build-gigamidi-shard --repr remi --output data/shards/gigamidi_remi.jsonl --limit 50
 
 # Estimate training time on your machine (add --benchmark to measure one step)
-pip install -e ".[train]"
 midi-llm estimate-training --repr remi --steps 50 --seq-len 512 --benchmark
 
 # Eval loop: copy-source baseline (no LLM) or full infer+score
-pip install -e ../musicinstruct
 midi-llm eval-edit ../musicinstruct/data/pilot/pilot.jsonl \
   --output-dir results/copy_source --baseline copy-source --split test
 
 # Stage S3 LoRA pilot (requires HF Llama license + ~8GB+ unified/GPU memory)
-midi-llm train-lora data/shards/edit_remi_train.jsonl \
+midi-llm train-lora data/shards/edit_remi.jsonl \
   --output-dir runs/remi_lora_pilot \
   --repr remi --max-steps 50 --max-samples 32 --max-seq-len 512
 ```
 
 ## Representations
 
-| Arm | Module | Notes |
-|-----|--------|-------|
-| `abc` | `midi_repr.abc_repr` | Text notation; native LLM tokenizer at train time |
-| `remi` | `midi_repr.remi_repr` | REMI+ via MidiTok |
-| `amt` | `midi_repr.amt_repr` | AMT arrival-time tokens via `anticipation` |
-| `octuple` | `midi_repr.octuple_repr` | Octuple compound tokens via MidiTok |
+| Arm | Module | Status |
+|-----|--------|--------|
+| `remi` | `midi_repr.remi_repr` | active — REMI+ via MidiTok |
+| `amt` | `midi_repr.amt_repr` | active — AMT via `anticipation` |
+| `octuple` | `midi_repr.octuple_repr` | active — Octuple via MidiTok |
+| `abc` | `midi_repr.abc_repr` | **disabled** |
+
+All active arms use **space-separated token strings + native Llama BPE** (`tokenizer_mode: bpe_text`, no vocab extension). Use `token-stats` for **BPE-comparable** efficiency numbers (`n_bpe_tokens`, `bpe_tokens_per_note`).
+
+## Implemented CLI commands
+
+| Command | Status |
+|---------|--------|
+| `token-stats` | representation + Llama BPE counts |
+| `roundtrip` | encode/decode + MIDI fidelity check |
+| `build-instruct-shard` | S3 edit JSONL |
+| `build-syntax-shard` | S0 syntax JSONL |
+| `build-gigamidi-shard` | S0 from HuggingFace GigaMIDI |
+| `build-midicaps-shard` | S2 caption↔MIDI JSONL |
+| `train-lora` | S3 LoRA SFT |
+| `infer-edit` | manifest preflight + LLM completions |
+| `eval-edit` | infer/decode/score (or copy-source baseline) |
+| `estimate-training` | wall-clock estimate |
+
+## Training stages
+
+| Stage | Data | CLI | Training |
+|-------|------|-----|----------|
+| S0 | GigaMIDI / local MIDIs | `build-syntax-shard`, `build-gigamidi-shard` | not implemented |
+| S1 | MusicPile + MIDI | — | planned |
+| S2 | MidiCaps | `build-midicaps-shard` | not implemented |
+| S3 | MIDI-Instruct train | `build-instruct-shard` | **`train-lora`** |
+
+See `docs/experiment_protocol.md` for frozen hyperparameters and evaluation protocol.
 
 ## Project layout
 
 ```
 midi_llm/
   midi_repr/     # encode/decode + round-trip per representation
-  data/          # SFT templates and shard builders
-  eval/          # MIDI-Instruct evaluation helpers
+  data/          # SFT templates, shard builders, JSONL validation
+  tokenization/  # Llama BPE counting for efficiency tables
+  train/         # LoRA SFT + dataset
+  infer/         # edit prompts, preflight, generation
+  eval/          # decode completions + musicinstruct runner
 configs/         # shared hyperparameters per representation arm
 docs/            # experiment protocol
+tests/           # self-contained fixtures (no sibling repo required)
 ```
-
-## Training stages (planned)
-
-| Stage | Data | Purpose |
-|-------|------|---------|
-| S0 | GigaMIDI subset | MIDI syntax per representation |
-| S1 | MusicPile + MIDI | Domain continued pretraining |
-| S2 | MidiCaps ↔ Lakh | Text↔MIDI alignment |
-| S3 | MIDI-Instruct train | Light LoRA editing adaptation |
-
-See `docs/experiment_protocol.md` for frozen hyperparameters and evaluation protocol.
 
 ## Citation
 

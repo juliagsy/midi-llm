@@ -1,24 +1,41 @@
 # Experiment protocol (Paper 2)
 
-Frozen comparison of ABC, REMI+, AMT, and Octuple under a unified Llama 3.2 1B recipe.
+Controlled comparison of REMI+, AMT, and Octuple under a unified Llama 3.2 1B recipe.
+
+**ABC is disabled** in v0: music21 does not produce valid ABC from MIDI. Re-enable as a fourth arm after implementing a tested converter.
+
+## Token protocol (v0)
+
+All active arms serialize MIDI as **space-separated token ID strings** in the SFT prompt/completion text. Training uses the **native Llama BPE tokenizer** with **no vocabulary extension** or embedding resize.
+
+Configs set `vocab_extension: false` and `tokenizer_mode: bpe_text`.
+
+### Efficiency measurement
+
+Representation-native counts (`n_repr_tokens`) are **not** comparable across arms. For Paper 2 efficiency tables, use:
+
+```bash
+midi-llm token-stats path/to/file.mid --json
+```
+
+Fields: `n_bpe_tokens`, `bpe_tokens_per_note` (Llama BPE on the serialized payload).
 
 ## Hold constant
 
 - Backbone: `meta-llama/Llama-3.2-1B-Instruct`
 - Context: 2048 tokens
 - Optimizer / LR / schedule: see `configs/base.yaml`
-- S2 data: MidiCaps captions + Lakh MIDI (when available)
 - S3 data: MIDI-Instruct train split (unique-gold)
 - S3 adapter: LoRA rank 16 (all arms)
 
 ## Training stages
 
-| Stage | Objective | Data |
-|-------|-----------|------|
-| S0 | MIDI syntax CE | GigaMIDI subset |
-| S1 | Domain CPT CE | MusicPile subset + standalone MIDI |
-| S2 | Text↔MIDI SFT | MidiCaps ↔ Lakh |
-| S3 | Edit SFT (LoRA) | MIDI-Instruct train |
+| Stage | Objective | Data | Shard builder | Trainer |
+|-------|-----------|------|---------------|---------|
+| S0 | MIDI syntax CE | GigaMIDI subset | `build-syntax-shard`, `build-gigamidi-shard` | — |
+| S1 | Domain CPT CE | MusicPile subset | — | planned |
+| S2 | Text↔MIDI SFT | MidiCaps | `build-midicaps-shard` | — |
+| S3 | Edit SFT (LoRA) | MIDI-Instruct train | `build-instruct-shard` | **`train-lora`** |
 
 Build shards:
 
@@ -26,8 +43,8 @@ Build shards:
 # S0 syntax
 midi-llm build-syntax-shard MIDI_DIR --repr remi --output data/shards/syntax_remi.jsonl
 
-# S2 caption↔MIDI (requires local Lakh + HuggingFace MidiCaps)
-midi-llm build-midicaps-shard --lakh-root /path/to/lmd --repr remi \
+# S2 caption↔MIDI (requires local MidiCaps extract)
+midi-llm build-midicaps-shard --midi-root /path/to/midicaps --repr remi \
   --output data/shards/midicaps_remi.jsonl --limit 1000
 
 # S3 editing
@@ -37,21 +54,54 @@ midi-llm build-instruct-shard MANIFEST.jsonl --repr remi --output data/shards/ed
 midi-llm train-lora data/shards/edit_remi.jsonl --output-dir runs/remi_lora --repr remi --max-steps 50
 ```
 
-## Evaluation axes
+## Evaluation (Paper 2 scope)
 
-1. **Understanding** — MIDI→caption on MidiCaps test
-2. **Generation** — caption→MIDI; FAD, CLAP, attribute accuracy
-3. **Editing** — MIDI-Instruct test via `musicinstruct score`
+**Implemented:** instruction editing on MIDI-Instruct test split.
+
+```bash
+midi-llm eval-edit MANIFEST.jsonl --output-dir results/remi --repr remi --split test
+# sanity baseline (no LLM):
+midi-llm eval-edit MANIFEST.jsonl --output-dir results/copy --baseline copy-source --split test
+```
+
+Pipeline: manifest preflight → LoRA inference → per-item decode → `musicinstruct score`.
+
+**Deferred:** MidiCaps captioning, caption→MIDI generation, FAD/CLAP.
+
+## Active representation arms
+
+| Arm | Config | Notes |
+|-----|--------|-------|
+| REMI+ | `repr_remi.yaml` | MidiTok REMI+ |
+| AMT | `repr_amt.yaml` | Anticipation MIDI tokenizer |
+| Octuple | `repr_octuple.yaml` | MidiTok Octuple |
+| ABC | `repr_abc.yaml` | **disabled** |
 
 ## Hypotheses
 
-- H1: Compound (Octuple) → shorter sequences, comparable quality
-- H2: ABC → strong captioning, weak precise editing
-- H3: AMT → strong infilling/editing, weaker meter reasoning
-- H4: REMI → strong harmonic attributes, longer sequences
-- H5: Representation choice matters most on editing (joint score)
+- H1: Compound (Octuple) → shorter BPE sequences, comparable editing quality
+- H2: AMT → strong infilling/editing
+- H3: REMI → longer BPE sequences, strong harmonic structure
+- H4: Representation choice matters most on editing (joint score)
 
 ## Paper split
 
 - **Paper 2**: representation comparison + basic editing (S3 LoRA on unique-gold)
 - **Paper 3**: scaled editing, constraint-gold, descriptive instructions, human eval
+
+## Implementation checklist
+
+| Component | Status |
+|-----------|--------|
+| REMI / AMT / Octuple encode-decode | done |
+| Round-trip MIDI fidelity checks | done |
+| JSONL validation + line numbers | done |
+| Instruct shard fail-on-empty | done |
+| Per-item decode isolation | done |
+| Infer manifest preflight | done |
+| Llama BPE token stats | done |
+| ABC arm | disabled |
+| Vocab extension / embedding resize | not implemented (v0 uses BPE-text) |
+| S0/S2 trainers | not implemented |
+| S1 MusicPile CPT | planned |
+| CI / LICENSE | optional (release hygiene) |
