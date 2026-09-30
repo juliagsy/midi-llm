@@ -60,4 +60,10 @@ def build_syntax_shard(
             }
             writer.write(json.dumps(record, ensure_ascii=False) + "\n")
             count += 1
+
+    if count == 0:
+        raise RuntimeError(
+            f"no syntax examples written to {out}. "
+            "Check midi_dir path, file extensions, and representation dependencies."
+        )
     return count
