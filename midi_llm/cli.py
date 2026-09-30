@@ -191,15 +191,23 @@ def _cmd_eval_edit(args: argparse.Namespace) -> int:
         from midi_llm.eval.musicinstruct_runner import run_musicinstruct_eval
 
         results_path = out / "results.json"
+        joint_threshold = args.joint_threshold
+        if joint_threshold is None:
+            from midi_llm.config import load_config
+
+            joint_threshold = load_config(args.repr)["eval"]["joint_threshold"]
+
         results = run_musicinstruct_eval(
             args.manifest,
             preds,
             output_results=results_path,
             split=args.split,
+            joint_threshold=joint_threshold,
             timeout_sec=args.score_timeout,
         )
         summary = {
             "baseline": "copy-source",
+            "joint_threshold": joint_threshold,
             "n_predictions": copy_result.n_written,
             "n_copy_failed": copy_result.n_failed,
             "n_copy_skipped": copy_result.n_skipped,
@@ -207,6 +215,12 @@ def _cmd_eval_edit(args: argparse.Namespace) -> int:
         }
         print(json.dumps(summary, indent=2))
         return 0
+
+    joint_threshold = args.joint_threshold
+    if joint_threshold is None:
+        from midi_llm.config import load_config
+
+        joint_threshold = load_config(args.repr)["eval"]["joint_threshold"]
 
     summary = run_edit_eval(
         args.manifest,
@@ -219,6 +233,7 @@ def _cmd_eval_edit(args: argparse.Namespace) -> int:
         max_new_tokens=args.max_new_tokens,
         skip_infer=args.skip_infer,
         completions_path=args.completions,
+        joint_threshold=joint_threshold,
         seed=args.seed,
         score_timeout_sec=args.score_timeout,
     )
@@ -355,6 +370,12 @@ def main(argv: list[str] | None = None) -> int:
         help="Run a non-LLM baseline instead of inference",
     )
     ev.add_argument("--seed", type=int, default=42, help="Random seed for inference (default: 42)")
+    ev.add_argument(
+        "--joint-threshold",
+        type=float,
+        default=None,
+        help="Joint pass threshold for musicinstruct score (default: eval.joint_threshold in config)",
+    )
     ev.add_argument(
         "--score-timeout",
         type=int,

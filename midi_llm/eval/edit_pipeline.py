@@ -95,6 +95,7 @@ def run_edit_eval(
             predictions_path,
             output_results=results_path,
             split=split,
+            joint_threshold=joint_threshold,
             timeout_sec=score_timeout_sec,
         )
     except (FileNotFoundError, subprocess.CalledProcessError, TimeoutError) as exc:
@@ -114,6 +115,7 @@ def run_edit_eval(
     summary = {
         "repr_name": repr_name,
         "split": split,
+        "joint_threshold": joint_threshold,
         "seed": seed,
         "n_predictions_decoded": decode_result.n_written,
         "n_decode_failed": decode_result.n_failed,
