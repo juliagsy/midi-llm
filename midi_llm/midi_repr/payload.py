@@ -11,8 +11,20 @@ from .base import EncodeResult
 COMPOUND_SEP = "|"
 FIELD_SEP = ","
 
+# Llama chat terminators that may appear in generated completion text.
+_CHAT_TERMINATOR_RE = re.compile(
+    r"<\|(?:eot_id|end_of_text|end_of_turn|end_of_message)\|>",
+    re.IGNORECASE,
+)
+
 # Legacy broken payloads used Python list repr, e.g. "[43, 4, 4] [44, 12, 4]"
 _LEGACY_COMPOUND_RE = re.compile(r"\[[^\]]+\]")
+
+
+def sanitize_midi_completion_text(payload: str) -> str:
+    """Strip chat control tokens and surrounding whitespace from model output."""
+    cleaned = _CHAT_TERMINATOR_RE.sub("", payload)
+    return cleaned.strip()
 
 
 @dataclass(frozen=True)
@@ -88,7 +100,7 @@ def _parse_legacy_compounds(text: str) -> list[list[int]]:
 
 def deserialize_midi_payload(repr_name: str, payload: str) -> DecodedPayload:
     """Parse LLM completion text back into representation-specific token structures."""
-    text = payload.strip()
+    text = sanitize_midi_completion_text(payload)
     if not text:
         raise ValueError("empty MIDI payload")
 

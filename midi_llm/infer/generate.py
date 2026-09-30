@@ -94,4 +94,4 @@ def generate_completion(
         )
 
     new_tokens = output[0, inputs["input_ids"].shape[1] :]
-    return tokenizer.decode(new_tokens, skip_special_tokens=False).strip()
+    return tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
