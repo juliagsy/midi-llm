@@ -8,4 +8,6 @@ dist/
 data/shards/
 *_roundtrip/
 decoded_midis/
+results/
+runs/
 .env
