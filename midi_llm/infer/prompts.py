@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 from midi_llm.data._encode import encode_midi_file
 from midi_llm.data.jsonl_io import MANIFEST_FIELDS, iter_jsonl

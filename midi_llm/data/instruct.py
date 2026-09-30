@@ -58,7 +58,7 @@ def build_instruct_shard(
                     item_id=record["item_id"],
                     split=record.get("split", split or "train"),
                 )
-            except Exception as exc:  # noqa: BLE001 — count encode failures per row
+            except Exception as exc:
                 skipped[f"encode_error:{type(exc).__name__}"] += 1
                 continue
 

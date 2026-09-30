@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import json
 import platform
 import subprocess
 import time
 from dataclasses import asdict, dataclass
-from pathlib import Path
 from typing import Any
 
 from midi_llm.config import load_config

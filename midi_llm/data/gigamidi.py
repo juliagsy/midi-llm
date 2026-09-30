@@ -6,8 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .templates import TaskKind
 from ._encode import encode_midi_bytes, encode_midi_file
+from .templates import TaskKind
 
 
 def _extract_midi_bytes(row: dict[str, Any]) -> bytes | None:

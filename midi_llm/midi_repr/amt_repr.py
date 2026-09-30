@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .base import EncodeResult, MidiRepresentation
 from ._midi_stats import midi_note_stats
+from .base import EncodeResult, MidiRepresentation
 
 
 def _require_anticipation():
