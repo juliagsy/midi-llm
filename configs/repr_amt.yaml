@@ -1,0 +1,5 @@
+# AMT arrival-time arm (MIDI-LLM compatible)
+representation: amt
+vocab_extension: true
+approx_vocab_size: 55030
+tokens_per_note: 3

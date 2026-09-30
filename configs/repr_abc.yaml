@@ -1,0 +1,4 @@
+# ABC text arm — no vocabulary extension
+representation: abc
+vocab_extension: false
+tokenizer: null  # native Llama tokenizer at train time

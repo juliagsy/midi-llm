@@ -1,0 +1,5 @@
+# Octuple compound-token arm via MidiTok
+representation: octuple
+vocab_extension: true
+approx_vocab_size: 10000
+tokens_per_note: 1

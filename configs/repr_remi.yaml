@@ -1,0 +1,4 @@
+# REMI+ arm via MidiTok
+representation: remi
+vocab_extension: true
+approx_vocab_size: 8000

@@ -1,0 +1,35 @@
+# Shared hyperparameters for all representation arms (Paper 2 protocol)
+
+model:
+  backbone: meta-llama/Llama-3.2-1B-Instruct
+  max_seq_len: 2048
+  precision: bf16
+
+training:
+  optimizer: adamw
+  learning_rate: 2.0e-4
+  lr_schedule: cosine
+  warmup_ratio: 0.03
+  effective_batch_tokens: 524288  # 512K (S0/S1); use 1048576 for S2
+  max_steps:
+    s0_syntax: 5000
+    s1_cpt: 25000
+    s2_sft: 25000
+    s3_edit_lora: 3000
+
+lora:
+  rank: 16
+  alpha: 32
+  target_modules: [q_proj, v_proj, k_proj, o_proj]
+
+data:
+  midi_caps: amaai-lab/MidiCaps
+  midi_root: null  # MidiCaps tarball extract (preferred over Lakh)
+  lakh_root: null  # legacy alias for midi_root
+  gigamidi: Metacreation/GigaMIDI
+  musicinstruct_manifest: ../musicinstruct/data/pilot/pilot.jsonl
+
+eval:
+  musicinstruct_split: test
+  midicaps_eval_ids: null  # MIDI-LLM 896-id list when available
+  joint_threshold: 0.9
