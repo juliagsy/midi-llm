@@ -63,6 +63,8 @@ class RoundTripResult:
     error: str | None = None
     stats_before: EncodeStats | None = None
     stats_after: EncodeStats | None = None
+    fidelity_ok: bool | None = None
+    fidelity_summary: str | None = None
 
 
 class MidiRepresentation(ABC):
@@ -105,7 +107,22 @@ class MidiRepresentation(ABC):
                     error="encode produced neither token_ids nor text",
                     stats_before=encoded.stats,
                 )
+            from ._fidelity import compare_midi_fidelity
+
+            fidelity = compare_midi_fidelity(source, destination)
             reencoded = self.encode(destination)
+            if not fidelity.ok:
+                return RoundTripResult(
+                    repr_name=self.name,
+                    source=source,
+                    output=destination,
+                    success=False,
+                    error=f"round-trip fidelity failed: {fidelity.summary}",
+                    stats_before=encoded.stats,
+                    stats_after=reencoded.stats,
+                    fidelity_ok=False,
+                    fidelity_summary=fidelity.summary,
+                )
             return RoundTripResult(
                 repr_name=self.name,
                 source=source,
@@ -113,6 +130,8 @@ class MidiRepresentation(ABC):
                 success=True,
                 stats_before=encoded.stats,
                 stats_after=reencoded.stats,
+                fidelity_ok=True,
+                fidelity_summary=fidelity.summary,
             )
         except Exception as exc:  # noqa: BLE001 — surface round-trip failures to CLI
             return RoundTripResult(

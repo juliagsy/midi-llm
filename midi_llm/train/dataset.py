@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
+
+from midi_llm.data.jsonl_io import SFT_FIELDS, iter_jsonl
 
 try:
     from torch.utils.data import Dataset
@@ -42,14 +43,12 @@ class SFTJsonlDataset(Dataset):
     ) -> None:
         self.records: list[dict[str, Any]] = []
         path = Path(shard_path)
-        with path.open(encoding="utf-8") as handle:
-            for line in handle:
-                line = line.strip()
-                if not line:
-                    continue
-                self.records.append(json.loads(line))
-                if max_samples is not None and len(self.records) >= max_samples:
-                    break
+        for _line_no, record in iter_jsonl(path, required_fields=SFT_FIELDS, label="SFT shard"):
+            self.records.append(record)
+            if max_samples is not None and len(self.records) >= max_samples:
+                break
+        if not self.records:
+            raise RuntimeError(f"SFT shard is empty or invalid: {path}")
         self.chat_template = chat_template
 
     def __len__(self) -> int:

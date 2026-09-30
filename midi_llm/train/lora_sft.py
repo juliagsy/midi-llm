@@ -93,6 +93,19 @@ def train_lora_sft(
     from midi_llm.train.dataset import SFTJsonlDataset
 
     cfg = load_config(repr_name)
+    if repr_name:
+        if cfg.get("vocab_extension"):
+            raise ValueError(
+                "config requests vocab_extension=true but train_lora_sft uses the native "
+                "Llama BPE tokenizer on serialized MIDI text. Set vocab_extension: false "
+                "and tokenizer_mode: bpe_text in repr configs, or implement embedding resize."
+            )
+        if cfg.get("tokenizer_mode") != "bpe_text":
+            raise ValueError(
+                f"unsupported tokenizer_mode={cfg.get('tokenizer_mode')!r}; "
+                "Paper 2 v0 expects tokenizer_mode: bpe_text"
+            )
+
     model_name = cfg["model"]["backbone"]
     seq_len = max_seq_len or cfg["model"]["max_seq_len"]
     lr = learning_rate or cfg["training"]["learning_rate"]

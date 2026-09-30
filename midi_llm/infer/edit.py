@@ -8,6 +8,7 @@ from typing import Any
 
 from midi_llm.config import load_config
 from midi_llm.infer.generate import generate_completion, load_causal_lm
+from midi_llm.infer.preflight import preflight_manifest
 from midi_llm.infer.prompts import build_edit_prompt, iter_manifest_records
 
 
@@ -29,6 +30,8 @@ def run_edit_inference(
     backbone = model_name or cfg["model"]["backbone"]
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
+
+    preflight = preflight_manifest(manifest_path, split=split, max_items=max_items)
 
     model, tokenizer, device = load_causal_lm(backbone, adapter_path=adapter_path)
     completions_path = out / "completions.jsonl"
@@ -73,6 +76,7 @@ def run_edit_inference(
         "adapter_path": str(adapter_path) if adapter_path else None,
         "device": device,
         "n_completions": count,
+        "n_preflight_items": preflight.n_items,
         "completions_path": str(completions_path),
     }
     (out / "infer_meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")

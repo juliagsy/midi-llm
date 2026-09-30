@@ -2,23 +2,23 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Iterator
 
 from midi_llm.data._encode import encode_midi_file
+from midi_llm.data.jsonl_io import MANIFEST_FIELDS, iter_jsonl
 from midi_llm.data.templates import build_edit_example
 from midi_llm.train.dataset import format_llama_instruct
 
 
 def iter_manifest_records(manifest_path: str | Path, *, split: str | None = None) -> Iterator[dict]:
-    with Path(manifest_path).open(encoding="utf-8") as handle:
-        for line in handle:
-            if not line.strip():
-                continue
-            record = json.loads(line)
-            if split is None or record.get("split") == split:
-                yield record
+    for _line_no, record in iter_jsonl(
+        manifest_path,
+        required_fields=MANIFEST_FIELDS,
+        label="manifest",
+    ):
+        if split is None or record.get("split") == split:
+            yield record
 
 
 def build_edit_prompt(

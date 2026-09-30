@@ -15,6 +15,8 @@ from midi_llm.midi_repr.registry import REPR_NAMES, get_repr, list_reprs
 
 
 def _cmd_token_stats(args: argparse.Namespace) -> int:
+    from midi_llm.tokenization.stats import token_stats_for_midi
+
     path = Path(args.midi)
     if not path.is_file():
         print(f"error: not a file: {path}", file=sys.stderr)
@@ -24,38 +26,33 @@ def _cmd_token_stats(args: argparse.Namespace) -> int:
     rows = []
     exit_code = 0
     for name in names:
-        try:
-            backend = get_repr(name)
-            encoded = backend.encode(path)
-        except ImportError as exc:
-            exit_code = 1
-            rows.append({"repr": name, "error": str(exc)})
-            continue
-        stats = encoded.stats
-        rows.append(
-            {
-                "repr": name,
-                "n_tokens": encoded.n_tokens,
-                "n_notes": stats.n_notes if stats else None,
-                "tokens_per_note": round(stats.tokens_per_note, 3) if stats else None,
-                "n_tracks": stats.n_tracks if stats else None,
-                "duration_sec": round(stats.duration_sec, 3) if stats else None,
-            }
+        row = token_stats_for_midi(
+            path,
+            name,
+            model_name=args.model,
+            count_bpe=not args.no_bpe,
         )
+        payload = row.to_dict()
+        if payload.get("error"):
+            exit_code = 1
+        rows.append(payload)
 
     if args.json:
         print(json.dumps(rows, indent=2))
     else:
         for row in rows:
-            if "error" in row:
+            if row.get("error"):
                 print(f"{row['repr']:8}  SKIP  {row['error']}", file=sys.stderr)
                 continue
+            bpe = row["n_bpe_tokens"]
+            bpe_tpn = row["bpe_tokens_per_note"]
+            bpe_part = f"  bpe={bpe}  bpe_tpn={bpe_tpn}" if bpe is not None else ""
             print(
-                f"{row['repr']:8}  tokens={row['n_tokens']}  "
-                f"tpn={row['tokens_per_note']}  notes={row['n_notes']}  "
+                f"{row['repr']:8}  repr={row['n_repr_tokens']}{bpe_part}  "
+                f"repr_tpn={row['repr_tokens_per_note']}  notes={row['n_notes']}  "
                 f"tracks={row['n_tracks']}  dur={row['duration_sec']}s"
             )
-    if args.repr == "all" and any("error" not in row for row in rows):
+    if args.repr == "all" and any(not row.get("error") for row in rows):
         return 0
     return exit_code
 
@@ -74,6 +71,8 @@ def _cmd_roundtrip(args: argparse.Namespace) -> int:
         "source": str(result.source),
         "output": str(result.output) if result.output else None,
         "error": result.error,
+        "fidelity_ok": result.fidelity_ok,
+        "fidelity_summary": result.fidelity_summary,
     }
     if args.json:
         print(json.dumps(payload, indent=2))
@@ -228,9 +227,22 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="midi-llm", description="midi-llm representation toolkit")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    stats = sub.add_parser("token-stats", help="Compare token counts across representations")
+    stats = sub.add_parser(
+        "token-stats",
+        help="Compare representation and Llama BPE token counts for one MIDI file",
+    )
     stats.add_argument("midi", help="Path to a MIDI file")
     stats.add_argument("--repr", default="all", choices=[*REPR_NAMES, "all"])
+    stats.add_argument(
+        "--model",
+        default=None,
+        help="HF model id for BPE counting (default: backbone from repr config)",
+    )
+    stats.add_argument(
+        "--no-bpe",
+        action="store_true",
+        help="Skip Llama BPE counting (representation counts only)",
+    )
     stats.add_argument("--json", action="store_true")
     stats.set_defaults(func=_cmd_token_stats)
 

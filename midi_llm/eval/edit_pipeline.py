@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from midi_llm.data.jsonl_io import MANIFEST_FIELDS, iter_jsonl
 from midi_llm.eval.musicinstruct_runner import predictions_from_completions, run_musicinstruct_eval
 from midi_llm.infer.edit import run_edit_inference
 
@@ -19,7 +20,7 @@ def decode_completions_to_predictions(
     repr_name: str,
     output_predictions: str | Path,
     split: str = "test",
-) -> int:
+):
     return predictions_from_completions(
         manifest_path,
         completions_path,
@@ -66,7 +67,7 @@ def run_edit_eval(
         completions_path = meta["completions_path"]
 
     predictions_path = out / "predictions.jsonl"
-    n_preds = decode_completions_to_predictions(
+    decode_result = decode_completions_to_predictions(
         manifest_path,
         completions_path,
         repr_name=repr_name,
@@ -86,14 +87,18 @@ def run_edit_eval(
         # musicinstruct not installed — write decode-only summary
         results = {
             "error": "musicinstruct CLI unavailable; install ../musicinstruct",
-            "n_predictions_decoded": n_preds,
+            "n_predictions_decoded": decode_result.n_written,
+            "n_decode_failed": decode_result.n_failed,
         }
         results_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
 
     summary = {
         "repr_name": repr_name,
         "split": split,
-        "n_predictions_decoded": n_preds,
+        "n_predictions_decoded": decode_result.n_written,
+        "n_decode_failed": decode_result.n_failed,
+        "n_decode_skipped": decode_result.n_skipped,
+        "decode_failures_path": str(out / "decode_failures.jsonl"),
         "completions_path": str(completions_path),
         "predictions_path": str(predictions_path),
         "results_path": str(results_path),
@@ -116,11 +121,12 @@ def copy_source_as_baseline(
     out_dir = Path(output_predictions).parent / "copy_source_midis"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    with manifest.open(encoding="utf-8") as src, Path(output_predictions).open("w", encoding="utf-8") as dst:
-        for line in src:
-            if not line.strip():
-                continue
-            record = json.loads(line)
+    with Path(output_predictions).open("w", encoding="utf-8") as dst:
+        for _line_no, record in iter_jsonl(
+            manifest,
+            required_fields=MANIFEST_FIELDS,
+            label="manifest",
+        ):
             if split is not None and record.get("split") != split:
                 continue
             src_midi = root / record["midi_in"]
