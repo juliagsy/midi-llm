@@ -13,6 +13,8 @@ REPR_NAMES = ("remi", "amt", "octuple")
 # Reserved / disabled until a real MIDI↔ABC pipeline is implemented and tested.
 DISABLED_REPR_NAMES = ("abc",)
 
+_REPR_CACHE: dict[str, MidiRepresentation] = {}
+
 
 class RepresentationDisabledError(ValueError):
     """Raised when a representation arm is registered but not yet usable."""
@@ -25,19 +27,31 @@ def get_repr(name: str) -> MidiRepresentation:
             f"representation {name!r} is disabled: MIDI→ABC conversion is not yet "
             f"implemented. Active arms: {list(REPR_NAMES)}"
         )
+    if key in _REPR_CACHE:
+        return _REPR_CACHE[key]
+
     if key == "remi":
         from .remi_repr import REMIRepresentation
 
-        return REMIRepresentation()
-    if key == "amt":
+        backend: MidiRepresentation = REMIRepresentation()
+    elif key == "amt":
         from .amt_repr import AMTRepresentation
 
-        return AMTRepresentation()
-    if key == "octuple":
+        backend = AMTRepresentation()
+    elif key == "octuple":
         from .octuple_repr import OctupleRepresentation
 
-        return OctupleRepresentation()
-    raise ValueError(f"unknown representation {name!r}; choose from {REPR_NAMES}")
+        backend = OctupleRepresentation()
+    else:
+        raise ValueError(f"unknown representation {name!r}; choose from {REPR_NAMES}")
+
+    _REPR_CACHE[key] = backend
+    return backend
+
+
+def clear_repr_cache() -> None:
+    """Clear cached representation backends (for tests)."""
+    _REPR_CACHE.clear()
 
 
 def list_reprs(*, include_disabled: bool = False) -> list[str]:
