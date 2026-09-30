@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from midi_llm.config import load_config
+from midi_llm.config_helpers import resolve_grad_accum_steps
 from midi_llm.reproducibility import set_global_seed
 from midi_llm.train.shard_meta import resolve_repr_name
 
@@ -111,7 +112,7 @@ def train_lora_sft(
     max_seq_len: int | None = None,
     max_samples: int | None = None,
     per_device_batch_size: int = 1,
-    gradient_accumulation_steps: int = 8,
+    gradient_accumulation_steps: int | None = None,
     learning_rate: float | None = None,
     precision: str | None = None,
     seed: int | None = None,
@@ -142,6 +143,12 @@ def train_lora_sft(
     lr = learning_rate or cfg["training"]["learning_rate"]
     steps = max_steps or cfg["training"]["max_steps"]["s3_edit_lora"]
     lora_cfg = cfg["lora"]
+    grad_accum = resolve_grad_accum_steps(
+        cfg,
+        seq_len=seq_len,
+        batch_size=per_device_batch_size,
+        override=gradient_accumulation_steps,
+    )
 
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -172,7 +179,7 @@ def train_lora_sft(
         output_dir=str(out),
         max_steps=steps,
         per_device_train_batch_size=per_device_batch_size,
-        gradient_accumulation_steps=gradient_accumulation_steps,
+        gradient_accumulation_steps=grad_accum,
         learning_rate=lr,
         warmup_ratio=cfg["training"]["warmup_ratio"],
         lr_scheduler_type=cfg["training"]["lr_schedule"],
@@ -204,6 +211,7 @@ def train_lora_sft(
         "max_steps": steps,
         "max_seq_len": seq_len,
         "precision": prec,
+        "gradient_accumulation_steps": grad_accum,
     }
     (out / "train_meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     return out

@@ -334,7 +334,12 @@ def main(argv: list[str] | None = None) -> int:
     train.add_argument("--max-seq-len", type=int, default=None)
     train.add_argument("--max-samples", type=int, default=None)
     train.add_argument("--batch-size", type=int, default=1)
-    train.add_argument("--grad-accum", type=int, default=8)
+    train.add_argument(
+        "--grad-accum",
+        type=int,
+        default=None,
+        help="Gradient accumulation steps (default: derived from training.effective_batch_tokens)",
+    )
     train.add_argument("--learning-rate", type=float, default=None)
     train.add_argument("--precision", choices=["fp16", "bf16"], default=None, help="Override config precision (T4: fp16)")
     train.set_defaults(func=_cmd_train_lora)

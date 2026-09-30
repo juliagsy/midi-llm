@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from midi_llm.config import load_config
+from midi_llm.config_helpers import load_eval_item_ids
 from midi_llm.data.jsonl_io import MANIFEST_FIELDS, iter_jsonl
 from midi_llm.eval.musicinstruct_runner import predictions_from_completions, run_musicinstruct_eval
 from midi_llm.infer.edit import run_edit_inference
@@ -57,6 +59,9 @@ def run_edit_eval(
     score_timeout_sec: int = 600,
 ) -> dict[str, Any]:
     """Infer (optional), decode, and score against MIDI-Instruct."""
+    cfg = load_config(repr_name)
+    item_ids = load_eval_item_ids(cfg)
+
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
 
@@ -96,6 +101,7 @@ def run_edit_eval(
             output_results=results_path,
             split=split,
             joint_threshold=joint_threshold,
+            item_ids=item_ids,
             timeout_sec=score_timeout_sec,
         )
     except (FileNotFoundError, subprocess.CalledProcessError, TimeoutError) as exc:
@@ -116,6 +122,7 @@ def run_edit_eval(
         "repr_name": repr_name,
         "split": split,
         "joint_threshold": joint_threshold,
+        "n_eval_item_ids": len(item_ids) if item_ids is not None else None,
         "seed": seed,
         "n_predictions_decoded": decode_result.n_written,
         "n_decode_failed": decode_result.n_failed,

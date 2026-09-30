@@ -105,6 +105,28 @@ def _score_timeout_error(timeout_sec: int) -> TimeoutError:
     return TimeoutError(f"musicinstruct score exceeded {timeout_sec}s timeout")
 
 
+def _run_score_records(
+    manifest_path: str | Path,
+    predictions_path: str | Path,
+    *,
+    output_results: str | Path,
+    split: str,
+    joint_threshold: float,
+    item_ids: set[str] | None,
+) -> dict[str, Any]:
+    from musicinstruct.evaluation import score_records
+
+    results = score_records(
+        manifest_path,
+        predictions_path,
+        joint_threshold=joint_threshold,
+        split=split,
+        item_ids=item_ids,
+    )
+    Path(output_results).write_text(json.dumps(results, indent=2), encoding="utf-8")
+    return results
+
+
 def _run_inprocess_score(score_args: list[str], *, timeout_sec: int) -> None:
     try:
         from musicinstruct.cli import main as mi_main
@@ -131,9 +153,26 @@ def run_musicinstruct_eval(
     output_results: str | Path,
     split: str = "test",
     joint_threshold: float = 0.9,
+    item_ids: set[str] | None = None,
     timeout_sec: int = 600,
 ) -> dict[str, Any]:
     """Invoke `musicinstruct score` CLI and load JSON results."""
+    if item_ids is not None:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(
+                _run_score_records,
+                manifest_path,
+                predictions_path,
+                output_results=output_results,
+                split=split,
+                joint_threshold=joint_threshold,
+                item_ids=item_ids,
+            )
+            try:
+                return future.result(timeout=timeout_sec)
+            except concurrent.futures.TimeoutError as exc:
+                raise _score_timeout_error(timeout_sec) from exc
+
     score_args = [
         "score",
         str(manifest_path),
