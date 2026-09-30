@@ -10,7 +10,7 @@ from midi_llm.config import load_config
 from midi_llm.infer.generate import generate_completion, load_causal_lm
 from midi_llm.infer.preflight import preflight_manifest
 from midi_llm.infer.prompts import build_edit_prompt, iter_manifest_records
-from midi_llm.reproducibility import set_global_seed
+from midi_llm.reproducibility import item_seed, set_global_seed
 
 
 def run_edit_inference(
@@ -51,13 +51,14 @@ def run_edit_inference(
                 repr_name=repr_name,
                 chat_template=chat_template,
             )
+            sample_seed = None if seed is None else item_seed(seed, item_id)
             completion = generate_completion(
                 model,
                 tokenizer,
                 model_input,
                 max_new_tokens=max_new_tokens,
                 temperature=temperature,
-                seed=seed,
+                seed=sample_seed,
             )
             writer.write(
                 json.dumps(
