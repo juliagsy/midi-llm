@@ -41,10 +41,36 @@ def test_copy_source_baseline(sample_midi, tmp_path: Path):
     manifest.write_text(json.dumps(record) + "\n", encoding="utf-8")
 
     preds = tmp_path / "preds.jsonl"
-    n = copy_source_as_baseline(manifest, preds, split="test")
-    assert n == 1
+    result = copy_source_as_baseline(manifest, preds, split="test")
+    assert result.n_written == 1
+    assert result.n_failed == 0
     row = json.loads(preds.read_text(encoding="utf-8").strip())
     assert row["item_id"] == "t1"
+
+
+def test_copy_source_isolates_missing_midi(tmp_path: Path):
+    manifest = tmp_path / "mini.jsonl"
+    rows = [
+        {
+            "item_id": "ok",
+            "split": "test",
+            "midi_in": "in.mid",
+            "instruction": "x",
+        },
+        {
+            "item_id": "bad",
+            "split": "test",
+            "midi_in": "missing.mid",
+            "instruction": "x",
+        },
+    ]
+    manifest.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+    preds = tmp_path / "preds.jsonl"
+    result = copy_source_as_baseline(manifest, preds, split="test")
+    assert result.n_written == 0
+    assert result.n_failed == 2
+    assert (tmp_path / "copy_source_failures.jsonl").is_file()
 
 
 def test_iter_manifest_records(tmp_path: Path):

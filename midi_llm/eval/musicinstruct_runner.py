@@ -103,6 +103,7 @@ def run_musicinstruct_eval(
     *,
     output_results: str | Path,
     split: str = "test",
+    timeout_sec: int = 600,
 ) -> dict[str, Any]:
     """Invoke `musicinstruct score` CLI and load JSON results."""
     score_args = [
@@ -115,12 +116,18 @@ def run_musicinstruct_eval(
         split,
     ]
     if shutil.which("musicinstruct"):
-        completed = subprocess.run(
-            ["musicinstruct", *score_args],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
+        try:
+            completed = subprocess.run(
+                ["musicinstruct", *score_args],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=timeout_sec,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise TimeoutError(
+                f"musicinstruct score exceeded {timeout_sec}s timeout"
+            ) from exc
         if completed.returncode != 0:
             stderr = completed.stderr.strip() or completed.stdout.strip() or "unknown error"
             raise subprocess.CalledProcessError(

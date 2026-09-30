@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 
 def _require_infer_deps():
@@ -70,11 +69,17 @@ def generate_completion(
     max_new_tokens: int = 512,
     temperature: float = 0.2,
     top_p: float = 0.95,
+    seed: int | None = None,
 ) -> str:
     torch, *_ = _require_infer_deps()
     device = next(model.parameters()).device
     inputs = tokenizer(prompt, return_tensors="pt", add_special_tokens=False)
     inputs = {k: v.to(device) for k, v in inputs.items()}
+
+    generator = None
+    if seed is not None:
+        generator = torch.Generator(device=device)
+        generator.manual_seed(seed)
 
     with torch.no_grad():
         output = model.generate(
@@ -85,6 +90,7 @@ def generate_completion(
             top_p=top_p if temperature > 0 else None,
             pad_token_id=tokenizer.pad_token_id,
             eos_token_id=tokenizer.eos_token_id,
+            generator=generator,
         )
 
     new_tokens = output[0, inputs["input_ids"].shape[1] :]

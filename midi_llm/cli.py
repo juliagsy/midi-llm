@@ -148,6 +148,7 @@ def _cmd_train_lora(args: argparse.Namespace) -> int:
         gradient_accumulation_steps=args.grad_accum,
         learning_rate=args.learning_rate,
         precision=args.precision,
+        seed=args.seed,
     )
     print(f"saved LoRA adapter to {out / 'lora_adapter'}")
     return 0
@@ -166,6 +167,7 @@ def _cmd_infer_edit(args: argparse.Namespace) -> int:
         max_items=args.max_items,
         max_new_tokens=args.max_new_tokens,
         temperature=args.temperature,
+        seed=args.seed,
     )
     print(json.dumps(meta, indent=2))
     return 0
@@ -178,14 +180,24 @@ def _cmd_eval_edit(args: argparse.Namespace) -> int:
         out = Path(args.output_dir)
         out.mkdir(parents=True, exist_ok=True)
         preds = out / "predictions.jsonl"
-        n = copy_source_as_baseline(args.manifest, preds, split=args.split)
+        copy_result = copy_source_as_baseline(args.manifest, preds, split=args.split)
         from midi_llm.eval.musicinstruct_runner import run_musicinstruct_eval
 
         results_path = out / "results.json"
         results = run_musicinstruct_eval(
-            args.manifest, preds, output_results=results_path, split=args.split
+            args.manifest,
+            preds,
+            output_results=results_path,
+            split=args.split,
+            timeout_sec=args.score_timeout,
         )
-        summary = {"baseline": "copy-source", "n_predictions": n, "overall": results.get("overall")}
+        summary = {
+            "baseline": "copy-source",
+            "n_predictions": copy_result.n_written,
+            "n_copy_failed": copy_result.n_failed,
+            "n_copy_skipped": copy_result.n_skipped,
+            "overall": results.get("overall"),
+        }
         print(json.dumps(summary, indent=2))
         return 0
 
@@ -200,6 +212,8 @@ def _cmd_eval_edit(args: argparse.Namespace) -> int:
         max_new_tokens=args.max_new_tokens,
         skip_infer=args.skip_infer,
         completions_path=args.completions,
+        seed=args.seed,
+        score_timeout_sec=args.score_timeout,
     )
     print(json.dumps(summary, indent=2))
     return 0
@@ -288,7 +302,12 @@ def main(argv: list[str] | None = None) -> int:
     train = sub.add_parser("train-lora", help="LoRA SFT on a JSONL shard (Stage S3 pilot)")
     train.add_argument("shard", help="JSONL shard path")
     train.add_argument("--output-dir", required=True, help="Checkpoint output directory")
-    train.add_argument("--repr", default=None, help="Representation arm for config merge")
+    train.add_argument(
+        "--repr",
+        default=None,
+        help="Representation arm (required unless shard records include repr_name)",
+    )
+    train.add_argument("--seed", type=int, default=42, help="Random seed for training (default: 42)")
     train.add_argument("--max-steps", type=int, default=None)
     train.add_argument("--max-seq-len", type=int, default=None)
     train.add_argument("--max-samples", type=int, default=None)
@@ -308,6 +327,7 @@ def main(argv: list[str] | None = None) -> int:
     infer.add_argument("--max-items", type=int, default=None)
     infer.add_argument("--max-new-tokens", type=int, default=512)
     infer.add_argument("--temperature", type=float, default=0.2)
+    infer.add_argument("--seed", type=int, default=42, help="Random seed for sampling (default: 42)")
     infer.set_defaults(func=_cmd_infer_edit)
 
     ev = sub.add_parser("eval-edit", help="Infer, decode, and score MIDI-Instruct edits")
@@ -326,6 +346,13 @@ def main(argv: list[str] | None = None) -> int:
         choices=["copy-source"],
         default=None,
         help="Run a non-LLM baseline instead of inference",
+    )
+    ev.add_argument("--seed", type=int, default=42, help="Random seed for inference (default: 42)")
+    ev.add_argument(
+        "--score-timeout",
+        type=int,
+        default=600,
+        help="Timeout in seconds for musicinstruct score subprocess (default: 600)",
     )
     ev.set_defaults(func=_cmd_eval_edit)
 

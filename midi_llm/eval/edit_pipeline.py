@@ -5,12 +5,21 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from midi_llm.data.jsonl_io import MANIFEST_FIELDS, iter_jsonl
 from midi_llm.eval.musicinstruct_runner import predictions_from_completions, run_musicinstruct_eval
 from midi_llm.infer.edit import run_edit_inference
+
+
+@dataclass
+class CopySourceResult:
+    n_written: int = 0
+    n_failed: int = 0
+    n_skipped: int = 0
+    failures: list[dict[str, str]] = field(default_factory=list)
 
 
 def decode_completions_to_predictions(
@@ -43,6 +52,8 @@ def run_edit_eval(
     skip_infer: bool = False,
     completions_path: str | Path | None = None,
     joint_threshold: float = 0.9,
+    seed: int | None = 42,
+    score_timeout_sec: int = 600,
 ) -> dict[str, Any]:
     """Infer (optional), decode, and score against MIDI-Instruct."""
     out = Path(output_dir)
@@ -63,6 +74,7 @@ def run_edit_eval(
             split=split,
             max_items=max_items,
             max_new_tokens=max_new_tokens,
+            seed=seed,
         )
         completions_path = meta["completions_path"]
 
@@ -82,11 +94,17 @@ def run_edit_eval(
             predictions_path,
             output_results=results_path,
             split=split,
+            timeout_sec=score_timeout_sec,
         )
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        # musicinstruct not installed — write decode-only summary
+    except (FileNotFoundError, subprocess.CalledProcessError, TimeoutError) as exc:
+        if isinstance(exc, FileNotFoundError):
+            error = "musicinstruct CLI unavailable; install ../musicinstruct"
+        elif isinstance(exc, TimeoutError):
+            error = f"musicinstruct score timed out after {score_timeout_sec}s"
+        else:
+            error = exc.output or str(exc)
         results = {
-            "error": "musicinstruct CLI unavailable; install ../musicinstruct",
+            "error": error,
             "n_predictions_decoded": decode_result.n_written,
             "n_decode_failed": decode_result.n_failed,
         }
@@ -95,6 +113,7 @@ def run_edit_eval(
     summary = {
         "repr_name": repr_name,
         "split": split,
+        "seed": seed,
         "n_predictions_decoded": decode_result.n_written,
         "n_decode_failed": decode_result.n_failed,
         "n_decode_skipped": decode_result.n_skipped,
@@ -113,26 +132,56 @@ def copy_source_as_baseline(
     output_predictions: str | Path,
     *,
     split: str = "test",
-) -> int:
+    failures_path: str | Path | None = None,
+) -> CopySourceResult:
     """Zero-edit baseline: predict midi_in unchanged (sanity / lower bound)."""
     manifest = Path(manifest_path)
     root = manifest.parent
-    count = 0
-    out_dir = Path(output_predictions).parent / "copy_source_midis"
+    predictions_root = Path(output_predictions).parent
+    out_dir = predictions_root / "copy_source_midis"
     out_dir.mkdir(parents=True, exist_ok=True)
+    result = CopySourceResult()
+    fail_path = (
+        Path(failures_path) if failures_path else predictions_root / "copy_source_failures.jsonl"
+    )
 
-    with Path(output_predictions).open("w", encoding="utf-8") as dst:
-        for _line_no, record in iter_jsonl(
+    with Path(output_predictions).open("w", encoding="utf-8") as dst, fail_path.open(
+        "w", encoding="utf-8"
+    ) as fail_writer:
+        for line_no, record in iter_jsonl(
             manifest,
             required_fields=MANIFEST_FIELDS,
             label="manifest",
         ):
             if split is not None and record.get("split") != split:
+                result.n_skipped += 1
                 continue
             src_midi = root / record["midi_in"]
             dest = out_dir / f"{record['item_id']}.mid"
-            shutil.copy2(src_midi, dest)
-            rel = dest.relative_to(Path(output_predictions).parent)
+            if not src_midi.is_file():
+                result.n_failed += 1
+                failure = {
+                    "item_id": record["item_id"],
+                    "line_no": str(line_no),
+                    "error": f"missing midi_in: {src_midi}",
+                }
+                result.failures.append(failure)
+                fail_writer.write(json.dumps(failure) + "\n")
+                continue
+            try:
+                shutil.copy2(src_midi, dest)
+            except OSError as exc:
+                result.n_failed += 1
+                failure = {
+                    "item_id": record["item_id"],
+                    "line_no": str(line_no),
+                    "error": str(exc),
+                }
+                result.failures.append(failure)
+                fail_writer.write(json.dumps(failure) + "\n")
+                continue
+
+            rel = dest.relative_to(predictions_root)
             dst.write(json.dumps({"item_id": record["item_id"], "midi_path": str(rel)}) + "\n")
-            count += 1
-    return count
+            result.n_written += 1
+    return result

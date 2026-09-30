@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
 from midi_llm.config import load_config
+from midi_llm.reproducibility import set_global_seed
+from midi_llm.train.shard_meta import resolve_repr_name
 
 
 def _require_train_deps():
@@ -75,6 +78,7 @@ def train_lora_sft(
     gradient_accumulation_steps: int = 8,
     learning_rate: float | None = None,
     precision: str | None = None,
+    seed: int | None = None,
     logging_steps: int = 10,
     save_steps: int = 200,
 ) -> Path:
@@ -92,19 +96,10 @@ def train_lora_sft(
 
     from midi_llm.train.dataset import SFTJsonlDataset
 
-    cfg = load_config(repr_name)
-    if repr_name:
-        if cfg.get("vocab_extension"):
-            raise ValueError(
-                "config requests vocab_extension=true but train_lora_sft uses the native "
-                "Llama BPE tokenizer on serialized MIDI text. Set vocab_extension: false "
-                "and tokenizer_mode: bpe_text in repr configs, or implement embedding resize."
-            )
-        if cfg.get("tokenizer_mode") != "bpe_text":
-            raise ValueError(
-                f"unsupported tokenizer_mode={cfg.get('tokenizer_mode')!r}; "
-                "Paper 2 v0 expects tokenizer_mode: bpe_text"
-            )
+    resolved_repr = resolve_repr_name(shard_path, repr_name)
+    cfg = load_config(resolved_repr)
+    train_seed = 42 if seed is None else seed
+    set_global_seed(train_seed)
 
     model_name = cfg["model"]["backbone"]
     seq_len = max_seq_len or cfg["model"]["max_seq_len"]
@@ -150,6 +145,8 @@ def train_lora_sft(
         save_total_limit=2,
         bf16=use_bf16,
         fp16=not use_bf16,
+        seed=train_seed,
+        data_seed=train_seed,
         report_to=[],
         remove_unused_columns=False,
     )
@@ -163,4 +160,14 @@ def train_lora_sft(
     trainer.train()
     trainer.save_model(str(out / "lora_adapter"))
     tokenizer.save_pretrained(out / "tokenizer")
+    meta = {
+        "repr_name": resolved_repr,
+        "shard_path": str(shard_path),
+        "model": model_name,
+        "seed": train_seed,
+        "max_steps": steps,
+        "max_seq_len": seq_len,
+        "precision": prec,
+    }
+    (out / "train_meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     return out

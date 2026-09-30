@@ -10,6 +10,7 @@ from midi_llm.config import load_config
 from midi_llm.infer.generate import generate_completion, load_causal_lm
 from midi_llm.infer.preflight import preflight_manifest
 from midi_llm.infer.prompts import build_edit_prompt, iter_manifest_records
+from midi_llm.reproducibility import set_global_seed
 
 
 def run_edit_inference(
@@ -24,6 +25,7 @@ def run_edit_inference(
     max_new_tokens: int = 512,
     temperature: float = 0.2,
     chat_template: bool = True,
+    seed: int | None = 42,
 ) -> dict[str, Any]:
     """Generate edit completions and write JSONL artifacts under output_dir."""
     cfg = load_config(repr_name)
@@ -32,6 +34,8 @@ def run_edit_inference(
     out.mkdir(parents=True, exist_ok=True)
 
     preflight = preflight_manifest(manifest_path, split=split, max_items=max_items)
+    if seed is not None:
+        set_global_seed(seed)
 
     model, tokenizer, device = load_causal_lm(backbone, adapter_path=adapter_path)
     completions_path = out / "completions.jsonl"
@@ -41,7 +45,7 @@ def run_edit_inference(
         for record in iter_manifest_records(manifest_path, split=split):
             if max_items is not None and count >= max_items:
                 break
-            item_id, model_input, plain_prompt = build_edit_prompt(
+            item_id, model_input, _plain_prompt = build_edit_prompt(
                 manifest_path,
                 record,
                 repr_name=repr_name,
@@ -53,6 +57,7 @@ def run_edit_inference(
                 model_input,
                 max_new_tokens=max_new_tokens,
                 temperature=temperature,
+                seed=seed,
             )
             writer.write(
                 json.dumps(
@@ -77,6 +82,8 @@ def run_edit_inference(
         "device": device,
         "n_completions": count,
         "n_preflight_items": preflight.n_items,
+        "seed": seed,
+        "temperature": temperature,
         "completions_path": str(completions_path),
     }
     (out / "infer_meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
