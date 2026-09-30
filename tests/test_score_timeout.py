@@ -1,4 +1,6 @@
+import concurrent.futures
 import subprocess
+import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -27,4 +29,30 @@ def test_run_musicinstruct_eval_timeout(tmp_path: Path):
             preds,
             output_results=results,
             timeout_sec=5,
+        )
+
+
+def test_run_musicinstruct_eval_inprocess_timeout(tmp_path: Path):
+    manifest = tmp_path / "manifest.jsonl"
+    manifest.write_text("{}\n", encoding="utf-8")
+    preds = tmp_path / "preds.jsonl"
+    preds.write_text("{}\n", encoding="utf-8")
+    results = tmp_path / "results.json"
+
+    def slow_main(_args):
+        time.sleep(2)
+        return 0
+
+    with (
+        patch("midi_llm.eval.musicinstruct_runner.shutil.which", return_value=None),
+        patch("midi_llm.eval.musicinstruct_runner.concurrent.futures.ThreadPoolExecutor") as mock_pool,
+        pytest.raises(TimeoutError, match="exceeded"),
+    ):
+        future = mock_pool.return_value.__enter__.return_value.submit.return_value
+        future.result.side_effect = concurrent.futures.TimeoutError()
+        run_musicinstruct_eval(
+            manifest,
+            preds,
+            output_results=results,
+            timeout_sec=1,
         )

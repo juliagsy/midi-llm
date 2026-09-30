@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import shutil
 import subprocess
@@ -100,12 +101,36 @@ def predictions_from_completions(
     return result
 
 
+def _score_timeout_error(timeout_sec: int) -> TimeoutError:
+    return TimeoutError(f"musicinstruct score exceeded {timeout_sec}s timeout")
+
+
+def _run_inprocess_score(score_args: list[str], *, timeout_sec: int) -> None:
+    try:
+        from musicinstruct.cli import main as mi_main
+    except ImportError as exc:
+        raise FileNotFoundError(
+            "musicinstruct not installed; pip install -e ../musicinstruct"
+        ) from exc
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(mi_main, score_args)
+        try:
+            exit_code = future.result(timeout=timeout_sec)
+        except concurrent.futures.TimeoutError as exc:
+            raise _score_timeout_error(timeout_sec) from exc
+
+    if exit_code != 0:
+        raise subprocess.CalledProcessError(exit_code, ["musicinstruct", *score_args])
+
+
 def run_musicinstruct_eval(
     manifest_path: str | Path,
     predictions_path: str | Path,
     *,
     output_results: str | Path,
     split: str = "test",
+    joint_threshold: float = 0.9,
     timeout_sec: int = 600,
 ) -> dict[str, Any]:
     """Invoke `musicinstruct score` CLI and load JSON results."""
@@ -117,6 +142,8 @@ def run_musicinstruct_eval(
         str(output_results),
         "--split",
         split,
+        "--joint-threshold",
+        str(joint_threshold),
     ]
     if shutil.which("musicinstruct"):
         try:
@@ -128,9 +155,7 @@ def run_musicinstruct_eval(
                 timeout=timeout_sec,
             )
         except subprocess.TimeoutExpired as exc:
-            raise TimeoutError(
-                f"musicinstruct score exceeded {timeout_sec}s timeout"
-            ) from exc
+            raise _score_timeout_error(timeout_sec) from exc
         if completed.returncode != 0:
             stderr = completed.stderr.strip() or completed.stdout.strip() or "unknown error"
             raise subprocess.CalledProcessError(
@@ -139,13 +164,5 @@ def run_musicinstruct_eval(
                 output=stderr,
             )
     else:
-        try:
-            from musicinstruct.cli import main as mi_main
-        except ImportError as exc:
-            raise FileNotFoundError(
-                "musicinstruct not installed; pip install -e ../musicinstruct"
-            ) from exc
-        exit_code = mi_main(score_args)
-        if exit_code != 0:
-            raise subprocess.CalledProcessError(exit_code, ["musicinstruct", *score_args])
+        _run_inprocess_score(score_args, timeout_sec=timeout_sec)
     return json.loads(Path(output_results).read_text(encoding="utf-8"))
