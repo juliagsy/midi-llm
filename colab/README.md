@@ -21,7 +21,7 @@ Notebooks for **Paper 2** LoRA editing experiments on a Colab **T4** (~16 GB VRA
 1. Upload this repo to GitHub (or open notebooks from your clone).
 2. Open `01_setup_and_data.ipynb` in Colab ([Open in Colab](https://colab.research.google.com/) → upload / GitHub).
 3. Set `HF_TOKEN` in the secrets cell (or paste when prompted).
-4. After training in `02`, run `03` with the same `RUN_ID` and `REPR`.
+4. After training in `02`, run `03` with the same `RUN_ID`, `REPR`, and `SEED`.
 
 ## T4 timing (estimates)
 
@@ -30,9 +30,9 @@ Notebooks for **Paper 2** LoRA editing experiments on a Colab **T4** (~16 GB VRA
 | Pilot | 50 | 5–10 min |
 | Medium | 300 | 30–45 min |
 | Full S3 | 3000 | 4–6 h |
-| 4 arms × 3000 | — | 16–24 h (use Colab Pro or split across sessions) |
+| 3 arms × 3000 | — | 12–18 h (use Colab Pro or split across sessions) |
 
-Uses **fp16** on T4 (bf16 is for A100/H100).
+Uses **fp16** on T4 (bf16 is for A100/H100). Default **SEED=42** for reproducible train/infer runs. Octuple shards use compound wire format `a,b,c|d,e,f` (validated in notebook 01).
 
 ## Persisting results
 
