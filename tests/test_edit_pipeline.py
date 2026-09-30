@@ -31,7 +31,12 @@ def test_build_edit_prompt(sample_midi, miditok_available, tmp_path: Path):
 
 def test_copy_source_baseline(sample_midi, tmp_path: Path):
     manifest = tmp_path / "mini.jsonl"
-    record = {"item_id": "t1", "split": "test", "midi_in": "in.mid", "instruction": "x"}
+    record = {
+        "item_id": "t1",
+        "split": "test",
+        "midi_in": "in.mid",
+        "instruction": "x",
+    }
     (tmp_path / "in.mid").write_bytes(sample_midi.read_bytes())
     manifest.write_text(json.dumps(record) + "\n", encoding="utf-8")
 
@@ -44,9 +49,10 @@ def test_copy_source_baseline(sample_midi, tmp_path: Path):
 
 def test_iter_manifest_records(tmp_path: Path):
     manifest = tmp_path / "m.jsonl"
+    base = {"midi_in": "in.mid", "instruction": "test"}
     manifest.write_text(
-        json.dumps({"item_id": "a", "split": "train"}) + "\n"
-        + json.dumps({"item_id": "b", "split": "test"}) + "\n",
+        json.dumps({"item_id": "a", "split": "train", **base}) + "\n"
+        + json.dumps({"item_id": "b", "split": "test", **base}) + "\n",
         encoding="utf-8",
     )
     ids = [r["item_id"] for r in iter_manifest_records(manifest, split="test")]

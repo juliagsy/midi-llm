@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import shutil
 from pathlib import Path
 
 import pretty_midi
@@ -45,3 +47,37 @@ def music21_available() -> bool:
         return True
     except ImportError:
         return False
+
+
+@pytest.fixture
+def instruct_mini_manifest(tmp_path: Path, sample_midi: Path) -> Path:
+    """Minimal MIDI-Instruct-style manifest with local MIDI files (no external repos)."""
+    root = tmp_path / "instruct_mini"
+    root.mkdir()
+    in_path = root / "in.mid"
+    gold_path = root / "gold.mid"
+    shutil.copy2(sample_midi, in_path)
+    shutil.copy2(sample_midi, gold_path)
+
+    manifest = root / "manifest.jsonl"
+    rows = [
+        {
+            "item_id": "train_001",
+            "split": "train",
+            "midi_in": "in.mid",
+            "gold_midi": "gold.mid",
+            "instruction": "Transpose up 2 semitones.",
+        },
+        {
+            "item_id": "test_001",
+            "split": "test",
+            "midi_in": "in.mid",
+            "gold_midi": "gold.mid",
+            "instruction": "Increase velocity on track 0.",
+        },
+    ]
+    manifest.write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+    return manifest
