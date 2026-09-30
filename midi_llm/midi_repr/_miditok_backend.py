@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from ._midi_stats import midi_note_stats
+from .payload import extract_compound_token_ids, extract_flat_token_ids
 
 
 def _require_miditok():
@@ -36,29 +37,29 @@ def load_score(midi_path: str | Path):
     return Score(str(midi_path))
 
 
-def flatten_token_ids(encoded: Any) -> list[int]:
-    if hasattr(encoded, "ids"):
-        return list(encoded.ids)
-    if isinstance(encoded, list):
-        if not encoded:
-            return []
-        if isinstance(encoded[0], list):
-            flat: list[int] = []
-            for track_tokens in encoded:
-                flat.extend(int(t) for t in track_tokens)
-            return flat
-        return [int(t) for t in encoded]
-    raise TypeError(f"unexpected encoded token type: {type(encoded)!r}")
-
-
 def encode_with_tokenizer(tokenizer, midi_path: str | Path) -> tuple[list[int], Any]:
     score = load_score(midi_path)
     encoded = tokenizer.encode(score)
-    return flatten_token_ids(encoded), encoded
+    return extract_flat_token_ids(encoded), encoded
 
 
-def decode_with_tokenizer(tokenizer, token_ids: list[int], output_path: str | Path) -> Path:
-    score = tokenizer.decode(token_ids)
+def encode_compound_with_tokenizer(tokenizer, midi_path: str | Path) -> tuple[list[list[int]], Any]:
+    score = load_score(midi_path)
+    encoded = tokenizer.encode(score)
+    return extract_compound_token_ids(encoded), encoded
+
+
+def decode_with_tokenizer(
+    tokenizer,
+    token_ids: list[int] | None,
+    output_path: str | Path,
+    *,
+    compound_token_ids: list[list[int]] | None = None,
+) -> Path:
+    ids = compound_token_ids if compound_token_ids is not None else token_ids
+    if ids is None:
+        raise ValueError("decode requires token_ids or compound_token_ids")
+    score = tokenizer.decode(ids)
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     score.dump_midi(str(out))

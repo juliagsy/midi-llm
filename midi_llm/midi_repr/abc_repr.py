@@ -25,7 +25,9 @@ class ABCRepresentation(MidiRepresentation):
         self,
         *,
         token_ids: list[int] | None = None,
+        compound_token_ids: list[list[int]] | None = None,
         text: str | None = None,
         output_path: str | Path,
     ) -> Path:
+        del token_ids, compound_token_ids
         raise NotImplementedError(_DISABLED_REASON)

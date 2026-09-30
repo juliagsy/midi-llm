@@ -19,6 +19,7 @@ def test_octuple_encode(sample_midi, miditok_available):
         pytest.skip("miditok not installed")
     backend = get_repr("octuple")
     encoded = backend.encode(sample_midi)
-    assert encoded.token_ids
+    assert encoded.compound_token_ids
+    assert encoded.token_ids is None
     assert encoded.stats
     assert encoded.stats.tokens_per_note > 0

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from midi_llm.data.jsonl_io import COMPLETION_FIELDS, MANIFEST_FIELDS, iter_jsonl
+from midi_llm.midi_repr.payload import deserialize_midi_payload
 from midi_llm.midi_repr.registry import get_repr
 
 
@@ -69,11 +70,13 @@ def predictions_from_completions(
             midi_out = out_dir / f"{item_id}.mid"
 
             try:
-                if repr_name == "abc":
-                    backend.decode_to_midi(text=completion, output_path=midi_out)
-                else:
-                    token_ids = [int(x) for x in completion.split()]
-                    backend.decode_to_midi(token_ids=token_ids, output_path=midi_out)
+                decoded = deserialize_midi_payload(repr_name, completion)
+                backend.decode_to_midi(
+                    token_ids=decoded.token_ids,
+                    compound_token_ids=decoded.compound_token_ids,
+                    text=decoded.text,
+                    output_path=midi_out,
+                )
             except Exception as exc:  # noqa: BLE001 — isolate per-item decode failures
                 result.n_failed += 1
                 failure = {

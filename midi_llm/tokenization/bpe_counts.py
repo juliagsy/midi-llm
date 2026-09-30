@@ -5,15 +5,12 @@ from __future__ import annotations
 from functools import lru_cache
 
 from midi_llm.midi_repr.base import EncodeResult
+from midi_llm.midi_repr.payload import serialize_midi_payload
 
 
 def serialized_payload(encoded: EncodeResult) -> str:
-    """Text form fed to the LLM (space-separated MIDI token IDs or ABC text)."""
-    if encoded.text is not None:
-        return encoded.text.strip()
-    if encoded.token_ids is not None:
-        return " ".join(str(token_id) for token_id in encoded.token_ids)
-    return ""
+    """Text form fed to the Llama BPE tokenizer."""
+    return serialize_midi_payload(encoded.repr_name, encoded)
 
 
 @lru_cache(maxsize=4)

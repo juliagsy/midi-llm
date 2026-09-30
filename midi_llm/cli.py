@@ -47,8 +47,10 @@ def _cmd_token_stats(args: argparse.Namespace) -> int:
             bpe = row["n_bpe_tokens"]
             bpe_tpn = row["bpe_tokens_per_note"]
             bpe_part = f"  bpe={bpe}  bpe_tpn={bpe_tpn}" if bpe is not None else ""
+            compound = row.get("n_compound_tokens")
+            compound_part = f"  compounds={compound}" if compound is not None else ""
             print(
-                f"{row['repr']:8}  repr={row['n_repr_tokens']}{bpe_part}  "
+                f"{row['repr']:8}  repr={row['n_repr_tokens']}{compound_part}{bpe_part}  "
                 f"repr_tpn={row['repr_tokens_per_note']}  notes={row['n_notes']}  "
                 f"tracks={row['n_tracks']}  dur={row['duration_sec']}s"
             )

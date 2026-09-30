@@ -10,6 +10,8 @@ All active arms serialize MIDI as **space-separated token ID strings** in the SF
 
 Configs set `vocab_extension: false` and `tokenizer_mode: bpe_text`.
 
+Octuple uses compound tokens serialized as `pitch,vel,dur,...|pitch,vel,dur,...` (pipe-separated compounds, comma-separated fields). REMI and AMT use space-separated flat integers.
+
 ### Efficiency measurement
 
 Representation-native counts (`n_repr_tokens`) are **not** comparable across arms. For Paper 2 efficiency tables, use:

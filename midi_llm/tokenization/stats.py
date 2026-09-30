@@ -15,6 +15,7 @@ from midi_llm.tokenization.bpe_counts import count_llama_bpe_tokens, serialized_
 class TokenStatsRow:
     repr: str
     n_repr_tokens: int
+    n_compound_tokens: int | None
     n_bpe_tokens: int | None
     bpe_tokens_per_note: float | None
     n_notes: int | None
@@ -43,6 +44,7 @@ def token_stats_for_midi(
         return TokenStatsRow(
             repr=repr_name,
             n_repr_tokens=0,
+            n_compound_tokens=None,
             n_bpe_tokens=None,
             bpe_tokens_per_note=None,
             n_notes=None,
@@ -57,6 +59,7 @@ def token_stats_for_midi(
     stats = encoded.stats
     n_notes = stats.n_notes if stats else None
     n_repr = encoded.n_tokens
+    n_compound = len(encoded.compound_token_ids) if encoded.compound_token_ids is not None else None
     repr_tpn = stats.tokens_per_note if stats else None
 
     n_bpe: int | None = None
@@ -75,6 +78,7 @@ def token_stats_for_midi(
         return TokenStatsRow(
             repr=repr_name,
             n_repr_tokens=n_repr,
+            n_compound_tokens=n_compound,
             n_bpe_tokens=None,
             bpe_tokens_per_note=None,
             n_notes=n_notes,
@@ -88,6 +92,7 @@ def token_stats_for_midi(
     return TokenStatsRow(
         repr=repr_name,
         n_repr_tokens=n_repr,
+        n_compound_tokens=n_compound,
         n_bpe_tokens=n_bpe,
         bpe_tokens_per_note=round(bpe_tpn, 3) if bpe_tpn is not None else None,
         n_notes=n_notes,

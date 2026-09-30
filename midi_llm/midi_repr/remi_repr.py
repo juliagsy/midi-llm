@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .base import EncodeResult, MidiRepresentation
 from ._miditok_backend import (
     build_stats,
     decode_with_tokenizer,
     default_tokenizer_config,
     encode_with_tokenizer,
 )
+from .base import EncodeResult, MidiRepresentation
 
 
 class REMIRepresentation(MidiRepresentation):
@@ -31,9 +31,11 @@ class REMIRepresentation(MidiRepresentation):
         self,
         *,
         token_ids: list[int] | None = None,
+        compound_token_ids: list[list[int]] | None = None,
         text: str | None = None,
         output_path: str | Path,
     ) -> Path:
+        del compound_token_ids
         if token_ids is None:
             raise ValueError("REMI decode requires token_ids")
         if text is not None:

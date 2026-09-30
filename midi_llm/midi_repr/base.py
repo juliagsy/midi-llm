@@ -41,12 +41,15 @@ class EncodeResult:
 
     repr_name: str
     token_ids: list[int] | None = None
+    compound_token_ids: list[list[int]] | None = None
     text: str | None = None
     stats: EncodeStats | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def n_tokens(self) -> int:
+        if self.compound_token_ids is not None:
+            return len(self.compound_token_ids)
         if self.token_ids is not None:
             return len(self.token_ids)
         if self.text is not None:
@@ -81,12 +84,15 @@ class MidiRepresentation(ABC):
         self,
         *,
         token_ids: list[int] | None = None,
+        compound_token_ids: list[list[int]] | None = None,
         text: str | None = None,
         output_path: str | Path,
     ) -> Path:
         raise NotImplementedError
 
     def roundtrip(self, midi_path: str | Path, output_dir: str | Path | None = None) -> RoundTripResult:
+        from .payload import deserialize_midi_payload, serialize_midi_payload
+
         source = Path(midi_path)
         out_dir = Path(output_dir) if output_dir else source.parent / "_roundtrip"
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -94,17 +100,24 @@ class MidiRepresentation(ABC):
 
         try:
             encoded = self.encode(source)
-            if encoded.token_ids is not None:
-                self.decode_to_midi(token_ids=encoded.token_ids, output_path=destination)
-            elif encoded.text is not None:
-                self.decode_to_midi(text=encoded.text, output_path=destination)
+            payload = serialize_midi_payload(self.name, encoded)
+            decoded = deserialize_midi_payload(self.name, payload)
+            if decoded.compound_token_ids is not None:
+                self.decode_to_midi(
+                    compound_token_ids=decoded.compound_token_ids,
+                    output_path=destination,
+                )
+            elif decoded.token_ids is not None:
+                self.decode_to_midi(token_ids=decoded.token_ids, output_path=destination)
+            elif decoded.text is not None:
+                self.decode_to_midi(text=decoded.text, output_path=destination)
             else:
                 return RoundTripResult(
                     repr_name=self.name,
                     source=source,
                     output=None,
                     success=False,
-                    error="encode produced neither token_ids nor text",
+                    error="payload deserialization produced no tokens",
                     stats_before=encoded.stats,
                 )
             from ._fidelity import compare_midi_fidelity

@@ -18,6 +18,14 @@ def test_serialized_payload_from_text():
     assert serialized_payload(encoded) == "X:1\nK:C\nC2"
 
 
+def test_serialized_payload_from_compound_tokens():
+    encoded = EncodeResult(
+        repr_name="octuple",
+        compound_token_ids=[[1, 2, 3], [4, 5, 6]],
+    )
+    assert serialized_payload(encoded) == "1,2,3|4,5,6"
+
+
 def test_count_llama_bpe_tokens_uses_tokenizer():
     class FakeTokenizer:
         def encode(self, text: str, add_special_tokens: bool = False) -> list[int]:

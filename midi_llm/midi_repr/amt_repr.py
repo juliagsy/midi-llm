@@ -49,9 +49,11 @@ class AMTRepresentation(MidiRepresentation):
         self,
         *,
         token_ids: list[int] | None = None,
+        compound_token_ids: list[list[int]] | None = None,
         text: str | None = None,
         output_path: str | Path,
     ) -> Path:
+        del compound_token_ids
         if token_ids is None:
             raise ValueError("AMT decode requires token_ids")
         if text is not None:
