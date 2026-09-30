@@ -1,0 +1,22 @@
+\section{Limitations}
+
+\paragraph{Small instruct split.}
+The pilot MIDI-Instruct train split ($\approx$240 items) limits absolute editing performance. We explicitly frame S3 results as \emph{comparative} across arms.
+
+\paragraph{Partial curriculum.}
+Only S3 LoRA is trained in v0.1. Zero-shot and S2-only baselines may underestimate arm potential. Full S0--S2 curriculum is future work.
+
+\paragraph{BPE-text vs.\ vocab extension.}
+We do not compare against MIDI-LLM's vocabulary-extension recipe~\cite{wu2026midillm}. Our protocol trades dedicated music tokens for implementation simplicity and fair BPE-length measurement; a hybrid study is left open.
+
+\paragraph{ABC arm excluded.}
+ABC remains a popular symbolic format~\cite{kumar2026abc,zhao2025abceval} but is disabled until a validated MIDI$\leftrightarrow$ABC converter ships.
+
+\paragraph{Generation metrics deferred.}
+Caption-to-MIDI FAD/CLAP and MidiCaps generation tables are deferred to avoid metric disagreement dominating the narrative before editing results are established.
+
+\paragraph{Synthetic unique-gold only.}
+Eval items use invertible programmatic transforms. Descriptive edits with many valid outputs (constraint-gold) are Paper~3 scope.
+
+\paragraph{Compute.}
+Full 3-arm $\times$ 3000-step runs require $\approx$12--18 GPU-hours on T4; larger backbones are not explored.

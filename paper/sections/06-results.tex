@@ -1,0 +1,72 @@
+\section{Results}
+\label{sec:results}
+
+\textit{This section contains placeholder tables. Replace with experimental numbers before submission.}
+
+\subsection{Token efficiency}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+\textbf{Arm} & \textbf{BPE / note $\downarrow$} & \textbf{BPE @ 2048 ctx} & \textbf{Notes / file $\approx$} \\
+\midrule
+REMI+  & \tbd & \tbd & \tbd \\
+AMT    & \tbd & \tbd & \tbd \\
+Octuple & \tbd & \tbd & \tbd \\
+\bottomrule
+\end{tabular}
+\caption{Llama-BPE efficiency on MIDI-Instruct test inputs ($n{=}$\tbd). Lower BPE-per-note indicates better compression under the shared BPE-text protocol.}
+\label{tab:efficiency}
+\end{table}
+
+\subsection{Editing quality (S3 LoRA, 3000 steps)}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+\textbf{Arm} & \textbf{EditSuccess} & \textbf{Preserve} & \textbf{Joint} & \textbf{Validity} \\
+\midrule
+Copy-source & 0.15 & \tbd & 0.00 & 1.00 \\
+REMI+ LoRA  & \tbd & \tbd & \tbd & \tbd \\
+AMT LoRA    & \tbd & \tbd & \tbd & \tbd \\
+Octuple LoRA & \tbd & \tbd & \tbd & \tbd \\
+\bottomrule
+\end{tabular}
+\caption{MIDI-Instruct test split. Joint threshold $=0.9$. Copy-source from pilot baseline.}
+\label{tab:editing}
+\end{table}
+
+\subsection{Breakdown by operator family}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+\textbf{Arm} & \textbf{Transpose} & \textbf{Tempo} & \textbf{Velocity} & \textbf{Mute} & \textbf{Program} \\
+\midrule
+REMI+  & \tbd & \tbd & \tbd & \tbd & \tbd \\
+AMT    & \tbd & \tbd & \tbd & \tbd & \tbd \\
+Octuple & \tbd & \tbd & \tbd & \tbd & \tbd \\
+\bottomrule
+\end{tabular}
+\caption{Joint pass rate by \texttt{op\_family}.}
+\label{tab:opfamily}
+\end{table}
+
+\subsection{Analysis plan}
+
+\begin{itemize}[leftmargin=*]
+\item Correlate BPE-per-note with joint score to test whether compression helps or hurts editing.
+\item Inspect decode failures and copy-source failures JSONL for arm-specific error modes.
+\item Compare val vs.\ test gap to quantify overfitting on $\approx$240 train items.
+\item Select winning arm for Paper~3 by joint score with preserve as tie-breaker.
+\end{itemize}
+
+\subsection{Expected findings (pre-registration)}
+
+If H4 holds, we expect $\geq 10$ percentage-point joint spread between best and worst arm despite similar validity. If all arms cluster near copy-source, the bottleneck is data scale (Paper~3) rather than representation (negative but publishable result).

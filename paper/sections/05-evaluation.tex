@@ -1,0 +1,69 @@
+\section{Evaluation}
+\label{sec:eval}
+
+\subsection{Primary task: instruction editing}
+
+We evaluate on the MIDI-Instruct test split~\cite{goh2026midiinstruct}. For each item $(x, e)$ with source MIDI $x$ and instruction $e$:
+
+\begin{enumerate}[leftmargin=*]
+\item Preflight-check that $x$ encodes under the arm.
+\item Run LoRA inference to produce completion text.
+\item Deserialize completion to MIDI $\hat{x}$ (per-item error isolation).
+\item Score with \texttt{musicinstruct score}.
+\end{enumerate}
+
+\paragraph{Metrics.}
+\begin{itemize}[leftmargin=*]
+\item \textbf{EditSuccess} --- mean score of \texttt{must\_change} predicates.
+\item \textbf{Preserve} --- mean score of \texttt{must\_preserve} predicates outside the edit mask.
+\item \textbf{Joint} --- pass if both axes $\geq 0.9$ (default threshold).
+\item \textbf{Validity} --- fraction of outputs that decode to parseable MIDI.
+\item \textbf{Over-edit} --- notes changed outside the mask.
+\item \textbf{Gold note-F1} --- on unique-gold edit regions.
+\end{itemize}
+
+Report overall and stratified by \texttt{op\_family}: transpose, tempo scale, velocity scale, track mute, program change.
+
+\subsection{Baselines}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Condition} & \textbf{Purpose} \\
+\midrule
+Copy-source & Grader floor ($\approx$0.15 edit-success, joint $=0$) \\
+Oracle (gold MIDI) & Grader ceiling (joint $=1.0$) \\
+S3 LoRA (per arm) & Primary comparison \\
+Zero-shot S2-only & Lower bound (planned when S2 trainer ships) \\
+\bottomrule
+\end{tabular}
+\caption{Evaluation conditions.}
+\label{tab:conditions}
+\end{table}
+
+\subsection{Efficiency metrics}
+
+Representation-native token counts (\texttt{n\_repr\_tokens}) are \emph{not} reported as cross-arm comparisons. Instead:
+
+\begin{itemize}[leftmargin=*]
+\item \texttt{n\_bpe\_tokens} --- Llama BPE length of serialized payload.
+\item \texttt{bpe\_tokens\_per\_note} --- BPE count normalized by note count.
+\item For Octuple: \texttt{n\_compound\_tokens} reported alongside BPE counts.
+\end{itemize}
+
+Computed via \texttt{midi-llm token-stats} on a fixed corpus of test-input MIDIs (same files for all arms).
+
+\subsection{Hypotheses}
+
+\begin{enumerate}[leftmargin=*]
+\item[H1] Octuple yields shorter Llama-BPE sequences than REMI+ at comparable note counts.
+\item[H2] AMT achieves strong edit success on infilling-style ops (transpose, velocity).
+\item[H3] REMI+ yields longer BPE sequences but competitive preserve scores.
+\item[H4] Joint editing score varies more across arms than validity alone predicts.
+\end{enumerate}
+
+\subsection{Reproducibility}
+
+All runs log \texttt{repr}, \texttt{seed}, checkpoint path, and manifest hash. Colab notebooks (\texttt{colab/01--03}) reproduce shard build, S3 training, and eval on a T4 with \texttt{RUN\_ID} and \texttt{SEED=42}. Scoring subprocess timeout defaults to 600\,s per item.

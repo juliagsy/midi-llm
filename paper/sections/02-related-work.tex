@@ -1,0 +1,16 @@
+\section{Related work}
+
+\paragraph{Symbolic generation with Transformers.}
+PopMAG, Compound Word Transformer, and Music Transformer established autoregressive MIDI modeling with learned or REMI-like vocabularies. These systems predate LLM backbones and typically do not accept free-text instructions at inference time.
+
+\paragraph{LLM-native text-to-MIDI.}
+MIDI-LLM~\cite{wu2026midillm} fine-tunes Llama~3.2~1B with vocabulary extension on AMT arrival-time tokens for MidiCaps caption-to-MIDI generation. Text2midi~\cite{text2midi2025} uses a T5 encoder and custom REMI decoder. Kumar et al.~\cite{kumar2026abc} compare ABC, REMI, and compound representations for generation quality. Our work differs by (i)~holding the backbone and BPE protocol fixed, (ii)~including Octuple compound serialization compatible with autoregressive decoding, and (iii)~evaluating editing rather than only unconditional or caption-conditioned generation.
+
+\paragraph{LLM understanding of symbolic music.}
+MIDI-LLaMA~\cite{midillama2026} connects a MusicBERT Octuple encoder to Llama-3 for captioning and QA. WildScore~\cite{mundada2025wildscore} and CSyMR~\cite{wang2026csymr} benchmark reasoning over score images or tool-augmented MIR queries. These tasks do not require emitting edited MIDI files under preservation constraints.
+
+\paragraph{Instruction-conditioned editing.}
+MuseCPBench~\cite{vishe2025musecpbench} studies audio remixing with context preservation in waveform space. BeatEdit~\cite{gu2026beatedit} frames generation as explicit score diffs. Not that Groove~\cite{groove2025} demonstrates zero-shot drum editing with unit tests on one-bar grooves. MIDI-Instruct~\cite{goh2026midiinstruct} generalizes to multi-track MIDI with dual edit/preserve metrics; we use it as the primary evaluation harness.
+
+\paragraph{Representation comparison gap.}
+No published study reports REMI+, AMT, and Octuple under identical LLM LoRA training with shared decoding infrastructure and a preservation-aware editing benchmark. MIDI-LLM's representation choice is not ablated; MIDI-LLaMA's encoder stack prevents a fair tokenizer-only comparison. We fill this gap.

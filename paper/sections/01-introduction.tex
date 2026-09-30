@@ -1,0 +1,18 @@
+\section{Introduction}
+
+Symbolic music research has split into parallel tracks: audio generation models that operate on waveforms or learned audio tokens, and MIDI-centric systems that treat music as structured, editable events. Large language models now caption scores, answer theory questions, and generate text-conditioned MIDI, yet practitioners still lack a controlled answer to a basic systems question: \emph{given the same backbone and training budget, which symbolic tokenizer should an LLM use?}
+
+Prior work typically commits to one representation. MIDI-LLM~\cite{wu2026midillm} extends Llama with an AMT vocabulary for text-to-MIDI generation. MIDI-LLaMA~\cite{midillama2026} routes Octuple through a frozen MusicBERT encoder for understanding tasks. Text2midi~\cite{text2midi2025} couples T5 to a REMI-like decoder. None of these studies isolate the representation under a shared LLM recipe, and none report instruction-conditioned \emph{editing} with explicit preservation checks.
+
+We argue that editing is the sharpest probe: generation metrics such as FAD and CLAP disagree across representations~\cite{kumar2026abc}, but editing requires both changing the requested attributes and leaving everything else intact---exactly what the MIDI-Instruct dual-metric grader measures~\cite{goh2026midiinstruct}.
+
+\paragraph{Contributions.}
+\begin{enumerate}[leftmargin=*]
+\item \textbf{MIDI-LLM}, an open pipeline encoding MIDI through REMI+, AMT, or Octuple into a unified BPE-text protocol (Section~\ref{sec:repr}).
+\item A \textbf{frozen cross-arm protocol}: Llama~3.2~1B-Instruct, LoRA rank~16, 2048 context, identical optimizers---only the serializer changes (Section~\ref{sec:train}).
+\item \textbf{Comparable efficiency metrics} via Llama BPE counts on serialized payloads, not native vocabulary sizes (Section~\ref{sec:eval}).
+\item \textbf{Instruction editing evaluation} on MIDI-Instruct unique-gold items with edit success, preserve, and joint scores---a capability absent from generation-only baselines (Section~\ref{sec:eval}).
+\item \textbf{Reproducible artifacts}: shard builders, round-trip fidelity checks, seeded train/infer runs, and Colab notebooks for T4 GPUs.
+\end{enumerate}
+
+Paper~3 builds on the winning representation from this study to scale editing data, introduce constraint-gold items, and run musician human evaluation; tool-augmented agents are out of scope here.

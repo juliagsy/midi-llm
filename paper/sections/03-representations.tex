@@ -1,0 +1,46 @@
+\section{Representations and serialization}
+\label{sec:repr}
+
+We compare three active arms. ABC notation was planned as a fourth arm but is disabled in v0.1 because existing MIDI$\to$ABC converters do not produce reliably parseable training data; re-enabling ABC requires a tested round-trip converter.
+
+\subsection{Arms}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Arm} & \textbf{Backend} & \textbf{Token shape} \\
+\midrule
+REMI+ & MidiTok REMI+ & Flat integer IDs \\
+AMT & Anticipatory MIDI Transformer & Flat integer IDs \\
+Octuple & MidiTok Octuple & Compound IDs (multi-field) \\
+\bottomrule
+\end{tabular}
+\caption{Active representation arms in MIDI-LLM v0.1.}
+\label{tab:arms}
+\end{table}
+
+\paragraph{REMI+.}
+Time-ordered events with pitch, duration, velocity, and bar-position tokens. Strong harmonic and metric structure; sequences tend to be longer than compound formats.
+
+\paragraph{AMT.}
+Anticipatory tokens encode inter-onset intervals and pitch relative to a moving horizon, yielding shorter flat sequences optimized for infilling~\cite{thickstun2023anticipation}.
+
+\paragraph{Octuple.}
+Each note is a compound token (pitch class, octave, duration, velocity, \ldots). Native vocabulary size is smaller per note, but compounds must be serialized reversibly for autoregressive LLM decoding.
+
+\subsection{BPE-text protocol (v0)}
+
+Rather than extending the Llama embedding matrix with music-specific tokens~\cite{wu2026midillm}, we serialize token IDs as UTF-8 text and tokenize with the \emph{native} Llama~3.2 BPE. Configurations set \texttt{vocab\_extension: false} and \texttt{tokenizer\_mode: bpe\_text}.
+
+\begin{itemize}[leftmargin=*]
+\item \textbf{REMI / AMT:} space-separated integers, e.g.\ \texttt{142 891 44 12}.
+\item \textbf{Octuple:} pipe-separated compounds with comma-separated fields, e.g.\ \texttt{43,4,4,23|44,12,4,23}. Legacy list-literal formats are accepted at decode time for backward compatibility.
+\end{itemize}
+
+This protocol makes cross-arm \emph{Llama BPE length} the fair efficiency metric: native representation token counts are not comparable because vocabularies differ in granularity.
+
+\subsection{Round-trip fidelity}
+
+Before any training run, each arm must pass encode$\to$decode round-trip checks on held-out MIDIs (\texttt{midi-llm roundtrip}). We report note retention, timing drift, and instrument count stability. Items that fail preflight at inference time are skipped per-item so one corrupt completion cannot abort an entire eval batch.

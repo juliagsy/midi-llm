@@ -1,0 +1,55 @@
+\section{Training protocol}
+\label{sec:train}
+
+\subsection{Design principle}
+
+Every hyperparameter not listed as arm-specific is shared. The only intentional variable is the representation serializer (Table~\ref{tab:arms}).
+
+\subsection{Backbone and adapter}
+
+\begin{itemize}[leftmargin=*]
+\item \textbf{Backbone:} \texttt{meta-llama/Llama-3.2-1B-Instruct}
+\item \textbf{Context:} 2048 tokens
+\item \textbf{Precision:} bf16 on A100/H100; fp16 on Colab T4
+\item \textbf{LoRA:} rank~16, $\alpha{=}32$, targets \texttt{q\_proj}, \texttt{k\_proj}, \texttt{v\_proj}, \texttt{o\_proj}
+\item \textbf{Optimizer:} AdamW, learning rate $2\times10^{-4}$, cosine schedule, 3\% warmup
+\item \textbf{Seed:} 42 (train and inference metadata logged to \texttt{train\_meta.json} / \texttt{infer\_meta.json})
+\end{itemize}
+
+\subsection{Curriculum stages}
+
+Table~\ref{tab:stages} specifies the full four-stage curriculum. \textbf{Paper~2 experiments use Stage~S3 only}; earlier stages are implemented as shard builders but trainers are deferred to avoid conflating representation effects with curriculum effects in v0.1.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}clll@{}}
+\toprule
+\textbf{Stage} & \textbf{Objective} & \textbf{Data} & \textbf{v0.1 status} \\
+\midrule
+S0 & MIDI syntax CE & GigaMIDI subset & shard only \\
+S1 & Domain CPT & MusicPile + MIDI & planned \\
+S2 & Text$\leftrightarrow$MIDI SFT & MidiCaps & shard only \\
+S3 & Edit SFT (LoRA) & MIDI-Instruct train & \textbf{implemented} \\
+\bottomrule
+\end{tabular}
+\caption{Training stages. Paper~2 reports S3 LoRA unless noted.}
+\label{tab:stages}
+\end{table}
+
+\subsection{Stage S3 edit shards}
+
+Each JSONL record pairs a Llama-chat prompt with a completion:
+\begin{enumerate}[leftmargin=*]
+\item \textbf{Prompt:} natural-language instruction + serialized source MIDI payload.
+\item \textbf{Completion:} serialized edited MIDI payload (unique-gold target from MIDI-Instruct train split).
+\end{enumerate}
+
+Shard construction (\texttt{build-instruct-shard}) fails on empty encodes and logs skip counts. The train split contains $\approx$240 unique-gold items in the pilot manifest; full-scale manifests will replace this for production numbers.
+
+\subsection{Training budget}
+
+S3 LoRA runs for 3000 steps per arm (pilot: 300 steps). Effective batch size follows token budget 524K in the shared config. We use LoRA rather than full fine-tuning to limit overfitting on the small instruct split and to keep cross-arm compute comparable.
+
+\paragraph{Scope guard.}
+S3 on $\approx$240 items is sufficient for \emph{comparative} editing across representations, not for claiming state-of-the-art absolute editing performance. Absolute numbers are deferred to Paper~3.
