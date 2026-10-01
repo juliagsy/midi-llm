@@ -84,7 +84,7 @@ class _SFTCollator:
         return _tokenize_batch(merged, self.tokenizer, self.max_seq_len)
 
 
-def train_lora_sft(
+def setup_lora_trainer(
     shard_path: str | Path,
     output_dir: str | Path,
     *,
@@ -99,8 +99,8 @@ def train_lora_sft(
     seed: int | None = None,
     logging_steps: int = 10,
     save_steps: int = 200,
-) -> Path:
-    """Fine-tune Llama with LoRA on a midi-llm JSONL shard."""
+):
+    """Build a HuggingFace Trainer for LoRA SFT (call ``save_lora_artifacts`` after train)."""
     (
         torch,
         LoraConfig,
@@ -186,9 +186,6 @@ def train_lora_sft(
         train_dataset=dataset,
         data_collator=_SFTCollator(tokenizer, seq_len),
     )
-    trainer.train()
-    trainer.save_model(str(out / "lora_adapter"))
-    tokenizer.save_pretrained(out / "tokenizer")
     meta = {
         "repr_name": resolved_repr,
         "shard_path": str(shard_path),
@@ -199,5 +196,55 @@ def train_lora_sft(
         "precision": prec,
         "gradient_accumulation_steps": grad_accum,
     }
-    (out / "train_meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    return trainer, out, meta
+
+
+def save_lora_artifacts(trainer, output_dir: str | Path, meta: dict[str, Any]) -> Path:
+    """Write ``lora_adapter/``, tokenizer, and ``train_meta.json`` from a Trainer."""
+    out = Path(output_dir)
+    adapter_dir = out / "lora_adapter"
+    trainer.save_model(str(adapter_dir))
+    trainer.tokenizer.save_pretrained(out / "tokenizer")
+    payload = {
+        **meta,
+        "saved_global_step": int(getattr(trainer.state, "global_step", 0)),
+    }
+    (out / "train_meta.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return adapter_dir
+
+
+def train_lora_sft(
+    shard_path: str | Path,
+    output_dir: str | Path,
+    *,
+    repr_name: str | None = None,
+    max_steps: int | None = None,
+    max_seq_len: int | None = None,
+    max_samples: int | None = None,
+    per_device_batch_size: int = 1,
+    gradient_accumulation_steps: int | None = None,
+    learning_rate: float | None = None,
+    precision: str | None = None,
+    seed: int | None = None,
+    logging_steps: int = 10,
+    save_steps: int = 200,
+) -> Path:
+    """Fine-tune Llama with LoRA on a midi-llm JSONL shard."""
+    trainer, out, meta = setup_lora_trainer(
+        shard_path,
+        output_dir,
+        repr_name=repr_name,
+        max_steps=max_steps,
+        max_seq_len=max_seq_len,
+        max_samples=max_samples,
+        per_device_batch_size=per_device_batch_size,
+        gradient_accumulation_steps=gradient_accumulation_steps,
+        learning_rate=learning_rate,
+        precision=precision,
+        seed=seed,
+        logging_steps=logging_steps,
+        save_steps=save_steps,
+    )
+    trainer.train()
+    save_lora_artifacts(trainer, out, meta)
     return out
