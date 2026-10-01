@@ -10,7 +10,12 @@ from pathlib import Path
 from typing import Any
 
 from midi_llm.config import load_config
-from midi_llm.config_helpers import load_eval_item_ids
+from midi_llm.config_helpers import (
+    load_eval_item_ids,
+    resolve_eval_temperature,
+    resolve_max_new_tokens,
+    resolve_score_timeout_sec,
+)
 from midi_llm.data.jsonl_io import MANIFEST_FIELDS, iter_jsonl
 from midi_llm.eval.musicinstruct_runner import predictions_from_completions, run_musicinstruct_eval
 from midi_llm.infer.edit import run_edit_inference
@@ -51,17 +56,20 @@ def run_edit_eval(
     model_name: str | None = None,
     adapter_path: str | Path | None = None,
     max_items: int | None = None,
-    max_new_tokens: int = 512,
-    temperature: float = 0.0,
+    max_new_tokens: int | None = None,
+    temperature: float | None = None,
     skip_infer: bool = False,
     completions_path: str | Path | None = None,
     joint_threshold: float = 0.9,
     seed: int | None = 42,
-    score_timeout_sec: int = 600,
+    score_timeout_sec: int | None = None,
 ) -> dict[str, Any]:
     """Infer (optional), decode, and score against MIDI-Instruct."""
     cfg = load_config(repr_name)
     item_ids = load_eval_item_ids(cfg)
+    token_cap = resolve_max_new_tokens(cfg, max_new_tokens)
+    sample_temp = resolve_eval_temperature(cfg, temperature)
+    timeout_sec = resolve_score_timeout_sec(cfg, score_timeout_sec)
 
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -80,8 +88,8 @@ def run_edit_eval(
             adapter_path=adapter_path,
             split=split,
             max_items=max_items,
-            max_new_tokens=max_new_tokens,
-            temperature=temperature,
+            max_new_tokens=token_cap,
+            temperature=sample_temp,
             seed=seed,
         )
         completions_path = meta["completions_path"]
@@ -106,14 +114,14 @@ def run_edit_eval(
             split=split,
             joint_threshold=joint_threshold,
             item_ids=item_ids,
-            timeout_sec=score_timeout_sec,
+            timeout_sec=timeout_sec,
         )
     except (FileNotFoundError, subprocess.CalledProcessError, TimeoutError) as exc:
         scoring_ok = False
         if isinstance(exc, FileNotFoundError):
             scoring_error = "musicinstruct CLI unavailable; install ../musicinstruct"
         elif isinstance(exc, TimeoutError):
-            scoring_error = f"musicinstruct score timed out after {score_timeout_sec}s"
+            scoring_error = f"musicinstruct score timed out after {timeout_sec}s"
         else:
             scoring_error = exc.output or str(exc)
         results = {
@@ -132,6 +140,9 @@ def run_edit_eval(
         "joint_threshold": joint_threshold,
         "n_eval_item_ids": len(item_ids) if item_ids is not None else None,
         "seed": seed,
+        "max_new_tokens": token_cap,
+        "temperature": sample_temp,
+        "score_timeout_sec": timeout_sec,
         "n_predictions_decoded": decode_result.n_written,
         "n_decode_failed": decode_result.n_failed,
         "n_decode_skipped": decode_result.n_skipped,

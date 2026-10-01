@@ -55,17 +55,19 @@ pip install -e ".[data]"
 midi-llm build-gigamidi-shard --repr remi --output data/shards/gigamidi_remi.jsonl --limit 50
 
 # Estimate training time on your machine (add --benchmark to measure one step)
-midi-llm estimate-training --repr remi --steps 50 --seq-len 512 --benchmark
+midi-llm estimate-training --repr remi --steps 50 --benchmark
 
 # Eval loop: copy-source baseline (no LLM) or full infer+score
 midi-llm eval-edit ../musicinstruct/data/pilot/pilot.jsonl \
   --output-dir results/copy_source --baseline copy-source --split test
 
-# Stage S3 LoRA pilot (requires HF Llama license + ~8GB+ unified/GPU memory)
+# Stage S3 LoRA pilot (defaults: max_seq_len=2048, max_new_tokens=1024 from configs/base.yaml)
 midi-llm train-lora data/shards/edit_remi.jsonl \
   --output-dir runs/remi_lora_pilot \
-  --repr remi --max-steps 50 --max-samples 32 --max-seq-len 512
+  --repr remi --max-steps 50 --max-samples 32
 ```
+
+On 8 GB unified-memory Macs, add `--max-seq-len 512 --batch-size 1` to avoid swapping.
 
 ## Representations
 

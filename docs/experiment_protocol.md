@@ -25,7 +25,8 @@ Fields: `n_bpe_tokens`, `bpe_tokens_per_note` (Llama BPE on the serialized paylo
 ## Hold constant
 
 - Backbone: `meta-llama/Llama-3.2-1B-Instruct`
-- Context: 2048 tokens
+- Context: `model.max_seq_len` = 2048 tokens
+- Edit generation cap: `eval.max_new_tokens` = 1024 tokens
 - Optimizer / LR / schedule: see `configs/base.yaml`
 - S3 data: MIDI-Instruct train split (unique-gold)
 - S3 adapter: LoRA rank 16 (all arms)
@@ -73,8 +74,9 @@ Pipeline: manifest preflight (file existence + optional encode check) → LoRA i
 - `eval.midicaps_eval_ids: null` — when unset, score the full manifest split; set to a JSON list path to restrict scoring to a fixed id set (e.g. MidiCaps overlap subset).
 - Scoring timeout: 600s per **scoring run**, not per item (`--score-timeout`).
 - Inference uses greedy decoding (`temperature=0`) by default for reproducible eval scores.
-- Completions record `hit_max_new_tokens` when generation reaches `--max-new-tokens` (512 default); truncated strings may decode to partial MIDI.
+- Completions record `hit_max_new_tokens` when generation reaches `eval.max_new_tokens` (1024); truncated strings may decode to partial MIDI.
 - SFT `max_seq_len` must fit the full edit prompt; rows that would lose `### Instruction` after truncation are rejected at tokenize time.
+- **Colab T4:** notebook 02 uses `MAX_SEQ_LEN=1024` as a hardware override; paper runs should use 2048 when VRAM allows.
 
 **Deferred:** MidiCaps captioning, caption→MIDI generation, FAD/CLAP.
 

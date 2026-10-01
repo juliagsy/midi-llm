@@ -36,3 +36,6 @@ eval:
   musicinstruct_split: test
   midicaps_eval_ids: null  # MIDI-LLM 896-id list when available
   joint_threshold: 0.9
+  max_new_tokens: 1024
+  temperature: 0.0
+  score_timeout_sec: 600

@@ -156,7 +156,13 @@ def _cmd_train_lora(args: argparse.Namespace) -> int:
 
 
 def _cmd_infer_edit(args: argparse.Namespace) -> int:
+    from midi_llm.config import load_config
+    from midi_llm.config_helpers import resolve_eval_temperature, resolve_max_new_tokens
     from midi_llm.infer.edit import run_edit_inference
+
+    cfg = load_config(args.repr)
+    max_new_tokens = resolve_max_new_tokens(cfg, args.max_new_tokens)
+    temperature = resolve_eval_temperature(cfg, args.temperature)
 
     meta = run_edit_inference(
         args.manifest,
@@ -166,8 +172,8 @@ def _cmd_infer_edit(args: argparse.Namespace) -> int:
         adapter_path=args.adapter,
         split=args.split,
         max_items=args.max_items,
-        max_new_tokens=args.max_new_tokens,
-        temperature=args.temperature,
+        max_new_tokens=max_new_tokens,
+        temperature=temperature,
         seed=args.seed,
     )
     print(json.dumps(meta, indent=2))
@@ -175,7 +181,12 @@ def _cmd_infer_edit(args: argparse.Namespace) -> int:
 
 
 def _cmd_eval_edit(args: argparse.Namespace) -> int:
+    from midi_llm.config import load_config
+    from midi_llm.config_helpers import resolve_score_timeout_sec
     from midi_llm.eval.edit_pipeline import copy_source_as_baseline, run_edit_eval
+
+    cfg = load_config(args.repr)
+    score_timeout = resolve_score_timeout_sec(cfg, args.score_timeout)
 
     if args.baseline == "copy-source":
         out = Path(args.output_dir)
@@ -203,7 +214,7 @@ def _cmd_eval_edit(args: argparse.Namespace) -> int:
                 output_results=results_path,
                 split=args.split,
                 joint_threshold=joint_threshold,
-                timeout_sec=args.score_timeout,
+                timeout_sec=score_timeout,
             )
             scoring_ok = results.get("overall") is not None
             scoring_error = None if scoring_ok else "musicinstruct score returned no overall metrics"
@@ -212,7 +223,7 @@ def _cmd_eval_edit(args: argparse.Namespace) -> int:
             if isinstance(exc, FileNotFoundError):
                 scoring_error = "musicinstruct CLI unavailable; install ../musicinstruct"
             elif isinstance(exc, TimeoutError):
-                scoring_error = f"musicinstruct score timed out after {args.score_timeout}s"
+                scoring_error = f"musicinstruct score timed out after {score_timeout}s"
             else:
                 scoring_error = exc.output or str(exc)
             results = {"error": scoring_error, "overall": None}
@@ -250,21 +261,25 @@ def _cmd_eval_edit(args: argparse.Namespace) -> int:
         completions_path=args.completions,
         joint_threshold=joint_threshold,
         seed=args.seed,
-        score_timeout_sec=args.score_timeout,
+        score_timeout_sec=score_timeout,
     )
     print(json.dumps(summary, indent=2))
     return 0 if summary.get("scoring_ok") else 1
 
 
 def _cmd_estimate_training(args: argparse.Namespace) -> int:
+    from midi_llm.config import load_config
     from midi_llm.train.estimate import estimate_training
+
+    cfg = load_config(args.repr)
+    seq_len = args.seq_len or cfg["model"]["max_seq_len"]
 
     report = estimate_training(
         repr_name=args.repr,
         stage=args.stage,
         steps=args.steps,
         samples=args.samples,
-        seq_len=args.seq_len,
+        seq_len=seq_len,
         batch_size=args.batch_size,
         grad_accum=args.grad_accum,
         run_benchmark=args.benchmark,
@@ -367,12 +382,17 @@ def main(argv: list[str] | None = None) -> int:
     infer.add_argument("--adapter", default=None, help="LoRA adapter directory")
     infer.add_argument("--split", default="test")
     infer.add_argument("--max-items", type=int, default=None)
-    infer.add_argument("--max-new-tokens", type=int, default=512)
+    infer.add_argument(
+        "--max-new-tokens",
+        type=int,
+        default=None,
+        help="Generation cap (default: eval.max_new_tokens in config)",
+    )
     infer.add_argument(
         "--temperature",
         type=float,
-        default=0.0,
-        help="Sampling temperature (0 = greedy; default for reproducible eval)",
+        default=None,
+        help="Sampling temperature (default: eval.temperature in config; 0 = greedy)",
     )
     infer.add_argument("--seed", type=int, default=42, help="Random seed for sampling (default: 42)")
     infer.set_defaults(func=_cmd_infer_edit)
@@ -385,12 +405,17 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument("--model", default=None)
     ev.add_argument("--adapter", default=None)
     ev.add_argument("--max-items", type=int, default=None)
-    ev.add_argument("--max-new-tokens", type=int, default=512)
+    ev.add_argument(
+        "--max-new-tokens",
+        type=int,
+        default=None,
+        help="Generation cap (default: eval.max_new_tokens in config)",
+    )
     ev.add_argument(
         "--temperature",
         type=float,
-        default=0.0,
-        help="Sampling temperature during inference (0 = greedy)",
+        default=None,
+        help="Sampling temperature during inference (default: eval.temperature in config)",
     )
     ev.add_argument("--skip-infer", action="store_true", help="Decode/score existing completions only")
     ev.add_argument("--completions", default=None, help="Path to completions.jsonl when --skip-infer")
@@ -410,8 +435,8 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument(
         "--score-timeout",
         type=int,
-        default=600,
-        help="Timeout in seconds for musicinstruct score subprocess (default: 600)",
+        default=None,
+        help="Timeout in seconds for musicinstruct score (default: eval.score_timeout_sec in config)",
     )
     ev.set_defaults(func=_cmd_eval_edit)
 
@@ -420,7 +445,12 @@ def main(argv: list[str] | None = None) -> int:
     est.add_argument("--stage", default="s3_edit_lora")
     est.add_argument("--steps", type=int, default=None)
     est.add_argument("--samples", type=int, default=224)
-    est.add_argument("--seq-len", type=int, default=512)
+    est.add_argument(
+        "--seq-len",
+        type=int,
+        default=None,
+        help="Sequence length for estimate (default: model.max_seq_len in config)",
+    )
     est.add_argument("--batch-size", type=int, default=1)
     est.add_argument("--grad-accum", type=int, default=8)
     est.add_argument("--model", default=None)

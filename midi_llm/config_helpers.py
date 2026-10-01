@@ -26,6 +26,25 @@ def resolve_grad_accum_steps(
     return max(1, int(token_budget) // per_step)
 
 
+def resolve_max_new_tokens(cfg: dict[str, Any], override: int | None = None) -> int:
+    """Return generation cap for edit completions."""
+    if override is not None:
+        return max(1, override)
+    return max(1, int(cfg.get("eval", {}).get("max_new_tokens", 1024)))
+
+
+def resolve_eval_temperature(cfg: dict[str, Any], override: float | None = None) -> float:
+    if override is not None:
+        return override
+    return float(cfg.get("eval", {}).get("temperature", 0.0))
+
+
+def resolve_score_timeout_sec(cfg: dict[str, Any], override: int | None = None) -> int:
+    if override is not None:
+        return max(1, override)
+    return max(1, int(cfg.get("eval", {}).get("score_timeout_sec", 600)))
+
+
 def load_eval_item_ids(cfg: dict[str, Any]) -> set[str] | None:
     """Load optional eval item-id filter from ``eval.midicaps_eval_ids`` path."""
     raw = cfg.get("eval", {}).get("midicaps_eval_ids")

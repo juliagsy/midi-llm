@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from midi_llm.config import load_config
+from midi_llm.config_helpers import resolve_eval_temperature, resolve_max_new_tokens
 from midi_llm.infer.generate import generate_completion, load_causal_lm
 from midi_llm.infer.preflight import preflight_encode, preflight_manifest
 from midi_llm.infer.prompts import build_edit_prompt, iter_manifest_records
@@ -22,8 +23,8 @@ def run_edit_inference(
     adapter_path: str | Path | None = None,
     split: str = "test",
     max_items: int | None = None,
-    max_new_tokens: int = 512,
-    temperature: float = 0.0,
+    max_new_tokens: int | None = None,
+    temperature: float | None = None,
     chat_template: bool = True,
     seed: int | None = 42,
     skip_encode_preflight: bool = False,
@@ -31,6 +32,8 @@ def run_edit_inference(
     """Generate edit completions and write JSONL artifacts under output_dir."""
     cfg = load_config(repr_name)
     backbone = model_name or cfg["model"]["backbone"]
+    token_cap = resolve_max_new_tokens(cfg, max_new_tokens)
+    sample_temp = resolve_eval_temperature(cfg, temperature)
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
 
@@ -86,8 +89,8 @@ def run_edit_inference(
                 model,
                 tokenizer,
                 model_input,
-                max_new_tokens=max_new_tokens,
-                temperature=temperature,
+                max_new_tokens=token_cap,
+                temperature=sample_temp,
                 seed=sample_seed,
             )
             if gen.hit_max_new_tokens:
@@ -128,8 +131,8 @@ def run_edit_inference(
             encode_preflight.n_encode_failed if encode_preflight is not None else None
         ),
         "seed": seed,
-        "temperature": temperature,
-        "max_new_tokens": max_new_tokens,
+        "temperature": sample_temp,
+        "max_new_tokens": token_cap,
         "completions_path": str(completions_path),
         "encode_failures_path": str(encode_failures_path),
     }
