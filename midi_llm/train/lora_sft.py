@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,21 @@ from midi_llm.config_helpers import resolve_grad_accum_steps
 from midi_llm.reproducibility import set_global_seed
 from midi_llm.train.sft_tokenize import tokenize_sft_example
 from midi_llm.train.shard_meta import resolve_repr_name
+
+
+def _warmup_scheduler_kwargs(
+    training_args_cls: type,
+    *,
+    warmup_ratio: float,
+    max_steps: int,
+) -> dict[str, float | int]:
+    """Support transformers v4 (warmup_ratio) and v5 (warmup_steps float ratio)."""
+    params = inspect.signature(training_args_cls.__init__).parameters
+    if "warmup_ratio" in params:
+        return {"warmup_ratio": warmup_ratio}
+    if "warmup_steps" in params:
+        return {"warmup_steps": warmup_ratio}
+    return {"warmup_steps": max(0, int(max_steps * warmup_ratio))}
 
 
 def _require_train_deps():
@@ -140,13 +156,18 @@ def train_lora_sft(
     )
     model = get_peft_model(model, peft_config)
 
+    warmup_kwargs = _warmup_scheduler_kwargs(
+        TrainingArguments,
+        warmup_ratio=float(cfg["training"]["warmup_ratio"]),
+        max_steps=steps,
+    )
     args = TrainingArguments(
         output_dir=str(out),
         max_steps=steps,
         per_device_train_batch_size=per_device_batch_size,
         gradient_accumulation_steps=grad_accum,
         learning_rate=lr,
-        warmup_ratio=cfg["training"]["warmup_ratio"],
+        **warmup_kwargs,
         lr_scheduler_type=cfg["training"]["lr_schedule"],
         logging_steps=logging_steps,
         save_steps=save_steps,

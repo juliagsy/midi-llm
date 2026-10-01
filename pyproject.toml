@@ -23,7 +23,6 @@ train = [
     "transformers>=4.44",
     "accelerate>=0.33",
     "peft>=0.12",
-    "torchao>=0.16.0",
     "datasets>=2.14",
 ]
 dev = ["pytest>=8", "ruff>=0.6"]
