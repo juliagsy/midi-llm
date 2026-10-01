@@ -1,7 +1,8 @@
 import concurrent.futures
 import subprocess
-import time
+import sys
 from pathlib import Path
+from types import ModuleType
 from unittest.mock import patch
 
 import pytest
@@ -39,12 +40,16 @@ def test_run_musicinstruct_eval_inprocess_timeout(tmp_path: Path):
     preds.write_text("{}\n", encoding="utf-8")
     results = tmp_path / "results.json"
 
-    def slow_main(_args):
-        time.sleep(2)
-        return 0
+    mi_cli = ModuleType("musicinstruct.cli")
+    mi_cli.main = lambda _args: 0
+    mi_root = ModuleType("musicinstruct")
 
     with (
         patch("midi_llm.eval.musicinstruct_runner.shutil.which", return_value=None),
+        patch.dict(
+            sys.modules,
+            {"musicinstruct": mi_root, "musicinstruct.cli": mi_cli},
+        ),
         patch("midi_llm.eval.musicinstruct_runner.concurrent.futures.ThreadPoolExecutor") as mock_pool,
         pytest.raises(TimeoutError, match="exceeded"),
     ):

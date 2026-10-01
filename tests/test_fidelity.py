@@ -39,3 +39,24 @@ def test_compare_midi_fidelity_detects_missing_notes(tmp_path: Path):
     report = compare_midi_fidelity(src, out)
     assert not report.ok
     assert report.note_recall < 0.9
+
+
+def test_compare_midi_fidelity_detects_duration_mismatch(tmp_path: Path):
+    src = tmp_path / "src.mid"
+    out = tmp_path / "out.mid"
+
+    src_midi = pretty_midi.PrettyMIDI(initial_tempo=120)
+    src_inst = pretty_midi.Instrument(program=0)
+    src_inst.notes.append(pretty_midi.Note(80, 60, 0.0, 1.0))
+    src_midi.instruments.append(src_inst)
+    src_midi.write(str(src))
+
+    out_midi = pretty_midi.PrettyMIDI(initial_tempo=120)
+    out_inst = pretty_midi.Instrument(program=0)
+    out_inst.notes.append(pretty_midi.Note(80, 60, 0.0, 0.2))
+    out_midi.instruments.append(out_inst)
+    out_midi.write(str(out))
+
+    report = compare_midi_fidelity(src, out)
+    assert not report.ok
+    assert report.note_recall == 0.0

@@ -6,6 +6,7 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+from midi_llm.data._encode import encode_midi_file
 from midi_llm.data.jsonl_io import MANIFEST_FIELDS, iter_jsonl
 
 
@@ -64,6 +65,75 @@ def preflight_manifest(
         n_items=count,
         n_missing_midi_in=len(missing),
         missing_paths=tuple(missing),
+    )
+
+
+@dataclass(frozen=True)
+class EncodePreflightReport:
+    n_items: int
+    n_encode_failed: int
+    failures: tuple[dict[str, str], ...]
+
+    @property
+    def ok(self) -> bool:
+        return self.n_encode_failed == 0
+
+
+def preflight_encode(
+    manifest_path: str | Path,
+    *,
+    repr_name: str,
+    split: str | None = "test",
+    max_items: int | None = None,
+    fail_on_encode_error: bool = True,
+) -> EncodePreflightReport:
+    """Verify manifest rows encode under ``repr_name`` before loading a model."""
+    manifest = Path(manifest_path)
+    root = manifest.parent
+    failures: list[dict[str, str]] = []
+    count = 0
+
+    for line_no, record in iter_jsonl(
+        manifest,
+        required_fields=MANIFEST_FIELDS,
+        label="manifest",
+    ):
+        if split is not None and record.get("split") != split:
+            continue
+        if max_items is not None and count >= max_items:
+            break
+        midi_in = root / record["midi_in"]
+        count += 1
+        if not midi_in.is_file():
+            continue
+        try:
+            encode_midi_file(repr_name, midi_in)
+        except Exception as exc:  # noqa: BLE001 — collect per-item encode failures
+            failures.append(
+                {
+                    "item_id": record["item_id"],
+                    "line_no": str(line_no),
+                    "midi_in": str(midi_in),
+                    "error": str(exc),
+                }
+            )
+
+    if count == 0:
+        raise RuntimeError(
+            f"encode preflight found zero items for split={split!r} in {manifest}"
+        )
+
+    if failures and fail_on_encode_error:
+        preview = failures[0]["item_id"]
+        raise RuntimeError(
+            f"encode preflight failed: {len(failures)}/{count} items "
+            f"(first item_id={preview})"
+        )
+
+    return EncodePreflightReport(
+        n_items=count,
+        n_encode_failed=len(failures),
+        failures=tuple(failures),
     )
 
 

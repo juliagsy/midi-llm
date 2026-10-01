@@ -51,5 +51,6 @@ def test_decode_isolates_failures(tmp_path: Path, sample_midi):
         runner.get_repr = original_get_repr
 
     assert result.n_written == 0
-    assert result.n_failed == 2
+    assert result.n_failed == 1
+    assert result.n_duplicates == 1
     assert (tmp_path / "decode_failures.jsonl").is_file()

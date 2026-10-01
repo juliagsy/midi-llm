@@ -65,23 +65,29 @@ def _match_notes(
     output: list[NoteEvent],
     *,
     onset_tol_sec: float,
+    duration_tol_sec: float,
 ) -> tuple[int, int, int]:
     """Return (matched, unmatched_source, unmatched_output)."""
     used_output: set[int] = set()
     matched = 0
     for src in source:
         src_start = _quantize_time(src.start, onset_tol_sec)
+        src_duration = src.end - src.start
         found = False
         for idx, out in enumerate(output):
             if idx in used_output:
                 continue
             if out.pitch != src.pitch or out.is_drum != src.is_drum:
                 continue
-            if abs(_quantize_time(out.start, onset_tol_sec) - src_start) <= onset_tol_sec:
-                used_output.add(idx)
-                matched += 1
-                found = True
-                break
+            if abs(_quantize_time(out.start, onset_tol_sec) - src_start) > onset_tol_sec:
+                continue
+            out_duration = out.end - out.start
+            if abs(out_duration - src_duration) > duration_tol_sec:
+                continue
+            used_output.add(idx)
+            matched += 1
+            found = True
+            break
         if not found:
             pass
     unmatched_source = len(source) - matched
@@ -111,7 +117,12 @@ def compare_midi_fidelity(
     n_tracks_source = len(src_midi.instruments)
     n_tracks_output = len(out_midi.instruments)
 
-    matched, _, _ = _match_notes(src_notes, out_notes, onset_tol_sec=onset_tol_sec)
+    matched, _, _ = _match_notes(
+        src_notes,
+        out_notes,
+        onset_tol_sec=onset_tol_sec,
+        duration_tol_sec=onset_tol_sec,
+    )
     recall = matched / len(src_notes) if src_notes else 1.0
     precision = matched / len(out_notes) if out_notes else 1.0
 

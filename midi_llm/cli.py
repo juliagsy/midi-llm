@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -54,8 +55,6 @@ def _cmd_token_stats(args: argparse.Namespace) -> int:
                 f"repr_tpn={row['repr_tokens_per_note']}  notes={row['n_notes']}  "
                 f"tracks={row['n_tracks']}  dur={row['duration_sec']}s"
             )
-    if args.repr == "all" and any(not row.get("error") for row in rows):
-        return 0
     return exit_code
 
 
@@ -197,24 +196,39 @@ def _cmd_eval_edit(args: argparse.Namespace) -> int:
 
             joint_threshold = load_config(args.repr)["eval"]["joint_threshold"]
 
-        results = run_musicinstruct_eval(
-            args.manifest,
-            preds,
-            output_results=results_path,
-            split=args.split,
-            joint_threshold=joint_threshold,
-            timeout_sec=args.score_timeout,
-        )
+        try:
+            results = run_musicinstruct_eval(
+                args.manifest,
+                preds,
+                output_results=results_path,
+                split=args.split,
+                joint_threshold=joint_threshold,
+                timeout_sec=args.score_timeout,
+            )
+            scoring_ok = results.get("overall") is not None
+            scoring_error = None if scoring_ok else "musicinstruct score returned no overall metrics"
+        except (FileNotFoundError, subprocess.CalledProcessError, TimeoutError) as exc:
+            scoring_ok = False
+            if isinstance(exc, FileNotFoundError):
+                scoring_error = "musicinstruct CLI unavailable; install ../musicinstruct"
+            elif isinstance(exc, TimeoutError):
+                scoring_error = f"musicinstruct score timed out after {args.score_timeout}s"
+            else:
+                scoring_error = exc.output or str(exc)
+            results = {"error": scoring_error, "overall": None}
+            results_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
         summary = {
             "baseline": "copy-source",
             "joint_threshold": joint_threshold,
             "n_predictions": copy_result.n_written,
             "n_copy_failed": copy_result.n_failed,
             "n_copy_skipped": copy_result.n_skipped,
+            "scoring_ok": scoring_ok,
+            "scoring_error": scoring_error,
             "overall": results.get("overall"),
         }
         print(json.dumps(summary, indent=2))
-        return 0
+        return 0 if scoring_ok else 1
 
     joint_threshold = args.joint_threshold
     if joint_threshold is None:
@@ -231,6 +245,7 @@ def _cmd_eval_edit(args: argparse.Namespace) -> int:
         adapter_path=args.adapter,
         max_items=args.max_items,
         max_new_tokens=args.max_new_tokens,
+        temperature=args.temperature,
         skip_infer=args.skip_infer,
         completions_path=args.completions,
         joint_threshold=joint_threshold,
@@ -238,7 +253,7 @@ def _cmd_eval_edit(args: argparse.Namespace) -> int:
         score_timeout_sec=args.score_timeout,
     )
     print(json.dumps(summary, indent=2))
-    return 0
+    return 0 if summary.get("scoring_ok") else 1
 
 
 def _cmd_estimate_training(args: argparse.Namespace) -> int:
@@ -353,7 +368,12 @@ def main(argv: list[str] | None = None) -> int:
     infer.add_argument("--split", default="test")
     infer.add_argument("--max-items", type=int, default=None)
     infer.add_argument("--max-new-tokens", type=int, default=512)
-    infer.add_argument("--temperature", type=float, default=0.2)
+    infer.add_argument(
+        "--temperature",
+        type=float,
+        default=0.0,
+        help="Sampling temperature (0 = greedy; default for reproducible eval)",
+    )
     infer.add_argument("--seed", type=int, default=42, help="Random seed for sampling (default: 42)")
     infer.set_defaults(func=_cmd_infer_edit)
 
@@ -366,6 +386,12 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument("--adapter", default=None)
     ev.add_argument("--max-items", type=int, default=None)
     ev.add_argument("--max-new-tokens", type=int, default=512)
+    ev.add_argument(
+        "--temperature",
+        type=float,
+        default=0.0,
+        help="Sampling temperature during inference (0 = greedy)",
+    )
     ev.add_argument("--skip-infer", action="store_true", help="Decode/score existing completions only")
     ev.add_argument("--completions", default=None, help="Path to completions.jsonl when --skip-infer")
     ev.add_argument(

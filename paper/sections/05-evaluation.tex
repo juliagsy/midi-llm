@@ -66,4 +66,4 @@ Computed via \texttt{midi-llm token-stats} on a fixed corpus of test-input MIDIs
 
 \subsection{Reproducibility}
 
-All runs log \texttt{repr}, \texttt{seed}, checkpoint path, and manifest hash. Colab notebooks (\texttt{colab/01--03}) reproduce shard build, S3 training, and eval on a T4 with \texttt{RUN\_ID} and \texttt{SEED=42}. Scoring subprocess timeout defaults to 600\,s per item.
+All runs log \texttt{repr}, \texttt{seed}, checkpoint path, and manifest hash. Colab notebooks (\texttt{colab/01--03}) reproduce shard build, S3 training, and eval on a T4 with \texttt{RUN\_ID} and \texttt{SEED=42}. Scoring subprocess timeout defaults to 600\,s per \emph{scoring run} (full manifest batch).

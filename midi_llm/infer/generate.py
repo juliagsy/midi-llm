@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
+
+
+@dataclass(frozen=True)
+class GenerateResult:
+    text: str
+    n_new_tokens: int
+    hit_max_new_tokens: bool
 
 
 def _require_infer_deps():
@@ -70,7 +78,7 @@ def generate_completion(
     temperature: float = 0.2,
     top_p: float = 0.95,
     seed: int | None = None,
-) -> str:
+) -> GenerateResult:
     torch, *_ = _require_infer_deps()
     device = next(model.parameters()).device
     inputs = tokenizer(prompt, return_tensors="pt", add_special_tokens=False)
@@ -94,4 +102,7 @@ def generate_completion(
         )
 
     new_tokens = output[0, inputs["input_ids"].shape[1] :]
-    return tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+    n_new = int(new_tokens.shape[0])
+    hit_max = n_new >= max_new_tokens
+    text = tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+    return GenerateResult(text=text, n_new_tokens=n_new, hit_max_new_tokens=hit_max)

@@ -9,6 +9,7 @@ from typing import Any
 from midi_llm.config import load_config
 from midi_llm.config_helpers import resolve_grad_accum_steps
 from midi_llm.reproducibility import set_global_seed
+from midi_llm.train.sft_tokenize import tokenize_sft_example
 from midi_llm.train.shard_meta import resolve_repr_name
 
 
@@ -22,48 +23,12 @@ def _require_train_deps():
     return torch, LoraConfig, TaskType, get_peft_model, AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
 
 
-MIN_COMPLETION_TOKENS = 8
-
-
-def _tokenize_sft_example(
-    tokenizer,
-    *,
-    prompt: str,
-    completion: str,
-    max_seq_len: int,
-) -> tuple[list[int], list[int]]:
-    """Tokenize one SFT row, reserving completion tokens when truncating."""
-    prompt_ids = tokenizer(prompt, add_special_tokens=False)["input_ids"]
-    completion_ids = tokenizer(completion, add_special_tokens=False)["input_ids"]
-
-    max_prompt_len = max(0, max_seq_len - MIN_COMPLETION_TOKENS)
-    if len(prompt_ids) > max_prompt_len:
-        prompt_ids = prompt_ids[-max_prompt_len:]
-
-    ids = prompt_ids + completion_ids
-    if len(ids) > max_seq_len:
-        overflow = len(ids) - max_seq_len
-        if overflow >= len(completion_ids):
-            completion_ids = []
-            ids = prompt_ids[-max_seq_len:]
-        else:
-            completion_ids = completion_ids[:-overflow]
-            ids = prompt_ids + completion_ids
-
-    prompt_len = len(ids) - len(completion_ids)
-    label = ids.copy()
-    label[:prompt_len] = [-100] * prompt_len
-    if not any(token != -100 for token in label):
-        raise ValueError("SFT example produced all-masked labels after truncation")
-    return ids, label
-
-
 def _tokenize_batch(examples: dict[str, list[str]], tokenizer, max_seq_len: int) -> dict[str, Any]:
     torch, *_ = _require_train_deps()
     input_ids = []
     labels = []
     for prompt, completion in zip(examples["prompt"], examples["completion"], strict=True):
-        ids, label = _tokenize_sft_example(
+        ids, label, _meta = tokenize_sft_example(
             tokenizer,
             prompt=prompt,
             completion=completion,

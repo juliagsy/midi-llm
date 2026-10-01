@@ -52,6 +52,7 @@ def run_edit_eval(
     adapter_path: str | Path | None = None,
     max_items: int | None = None,
     max_new_tokens: int = 512,
+    temperature: float = 0.0,
     skip_infer: bool = False,
     completions_path: str | Path | None = None,
     joint_threshold: float = 0.9,
@@ -80,6 +81,7 @@ def run_edit_eval(
             split=split,
             max_items=max_items,
             max_new_tokens=max_new_tokens,
+            temperature=temperature,
             seed=seed,
         )
         completions_path = meta["completions_path"]
@@ -94,6 +96,8 @@ def run_edit_eval(
     )
 
     results_path = out / "results.json"
+    scoring_ok = True
+    scoring_error: str | None = None
     try:
         results = run_musicinstruct_eval(
             manifest_path,
@@ -105,18 +109,22 @@ def run_edit_eval(
             timeout_sec=score_timeout_sec,
         )
     except (FileNotFoundError, subprocess.CalledProcessError, TimeoutError) as exc:
+        scoring_ok = False
         if isinstance(exc, FileNotFoundError):
-            error = "musicinstruct CLI unavailable; install ../musicinstruct"
+            scoring_error = "musicinstruct CLI unavailable; install ../musicinstruct"
         elif isinstance(exc, TimeoutError):
-            error = f"musicinstruct score timed out after {score_timeout_sec}s"
+            scoring_error = f"musicinstruct score timed out after {score_timeout_sec}s"
         else:
-            error = exc.output or str(exc)
+            scoring_error = exc.output or str(exc)
         results = {
-            "error": error,
+            "error": scoring_error,
             "n_predictions_decoded": decode_result.n_written,
             "n_decode_failed": decode_result.n_failed,
         }
         results_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
+    if scoring_ok and results.get("overall") is None:
+        scoring_ok = False
+        scoring_error = results.get("error") or "musicinstruct score returned no overall metrics"
 
     summary = {
         "repr_name": repr_name,
@@ -127,10 +135,13 @@ def run_edit_eval(
         "n_predictions_decoded": decode_result.n_written,
         "n_decode_failed": decode_result.n_failed,
         "n_decode_skipped": decode_result.n_skipped,
+        "n_decode_duplicates": decode_result.n_duplicates,
         "decode_failures_path": str(out / "decode_failures.jsonl"),
         "completions_path": str(completions_path),
         "predictions_path": str(predictions_path),
         "results_path": str(results_path),
+        "scoring_ok": scoring_ok,
+        "scoring_error": scoring_error,
         "overall": results.get("overall"),
     }
     (out / "eval_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")

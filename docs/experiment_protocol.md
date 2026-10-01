@@ -66,7 +66,15 @@ midi-llm eval-edit MANIFEST.jsonl --output-dir results/remi --repr remi --split 
 midi-llm eval-edit MANIFEST.jsonl --output-dir results/copy --baseline copy-source --split test
 ```
 
-Pipeline: manifest preflight → LoRA inference → per-item decode → `musicinstruct score`.
+Pipeline: manifest preflight (file existence + optional encode check) → LoRA inference (per-item encode failures skipped) → per-item decode → `musicinstruct score`.
+
+**Eval knobs (defaults in `configs/base.yaml`):**
+
+- `eval.midicaps_eval_ids: null` — when unset, score the full manifest split; set to a JSON list path to restrict scoring to a fixed id set (e.g. MidiCaps overlap subset).
+- Scoring timeout: 600s per **scoring run**, not per item (`--score-timeout`).
+- Inference uses greedy decoding (`temperature=0`) by default for reproducible eval scores.
+- Completions record `hit_max_new_tokens` when generation reaches `--max-new-tokens` (512 default); truncated strings may decode to partial MIDI.
+- SFT `max_seq_len` must fit the full edit prompt; rows that would lose `### Instruction` after truncation are rejected at tokenize time.
 
 **Deferred:** MidiCaps captioning, caption→MIDI generation, FAD/CLAP.
 

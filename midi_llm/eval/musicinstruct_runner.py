@@ -20,6 +20,7 @@ class DecodeBatchResult:
     n_written: int = 0
     n_failed: int = 0
     n_skipped: int = 0
+    n_duplicates: int = 0
     failures: list[dict[str, str]] = field(default_factory=list)
 
 
@@ -53,6 +54,7 @@ def predictions_from_completions(
 
     result = DecodeBatchResult()
     fail_path = Path(failures_path) if failures_path else predictions_root / "decode_failures.jsonl"
+    seen_item_ids: set[str] = set()
 
     with Path(output_predictions).open("w", encoding="utf-8") as dst, fail_path.open(
         "w", encoding="utf-8"
@@ -63,6 +65,10 @@ def predictions_from_completions(
             label="completion",
         ):
             item_id = row["item_id"]
+            if item_id in seen_item_ids:
+                result.n_duplicates += 1
+                continue
+            seen_item_ids.add(item_id)
             if item_id not in items_by_id:
                 result.n_skipped += 1
                 continue
