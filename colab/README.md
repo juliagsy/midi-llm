@@ -11,6 +11,7 @@ Colab gives **each notebook its own VM**. You cannot attach notebooks 01/02/03 t
 | Drive path | Contents |
 |------------|----------|
 | `MyDrive/midi-llm/shards/<RUN_ID>/` | S3 edit JSONL shards (from 01 or 02 bootstrap) |
+| `MyDrive/midi-llm/pilot/<RUN_ID>/` | MIDI-Instruct pilot manifest + `midi_in/` (from 01 — **required for notebook 03**) |
 | `MyDrive/midi-llm/runs/<RUN_ID>/` | LoRA adapters + eval outputs (from 02/03) |
 
 Keep **`RUN_ID`** identical across notebooks (default: `pilot_v1`).
