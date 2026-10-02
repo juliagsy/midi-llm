@@ -10,8 +10,9 @@ Colab gives **each notebook its own VM**. You cannot attach notebooks 01/02/03 t
 
 | Drive path | Contents |
 |------------|----------|
-| `MyDrive/midi-llm/shards/<RUN_ID>/` | S3 edit JSONL shards (from 01 or 02 bootstrap) |
+| `MyDrive/midi-llm/shards/<RUN_ID>/` | S3 edit + optional S2 MidiCaps JSONL shards (from 01 or 02 bootstrap) |
 | `MyDrive/midi-llm/pilot/<RUN_ID>/` | MIDI-Instruct pilot manifest + `midi_in/` (from 01 — **required for notebook 03**) |
+| `MyDrive/midi-llm/midicaps/` | Extracted MidiCaps `lmd_full/` tree (~1.6 GB; optional S2 cache from 01) |
 | `MyDrive/midi-llm/runs/<RUN_ID>/` | LoRA adapters + eval outputs (from 02/03) |
 
 Keep **`RUN_ID`** identical across notebooks (default: `pilot_v1`).
@@ -26,8 +27,8 @@ Keep **`RUN_ID`** identical across notebooks (default: `pilot_v1`).
 
 | Notebook | Purpose | Needs from prior step |
 |----------|---------|------------------------|
-| `01_setup_and_data.ipynb` | Clone, install, build shards, **sync shards to Drive** | — |
-| `02_train_lora_sft.ipynb` | Self-contained bootstrap + LoRA SFT | Drive shards (or builds them) |
+| `01_setup_and_data.ipynb` | Clone, install, build S3 (+ optional S2 MidiCaps / S0 GigaMIDI) shards, **sync to Drive** | — |
+| `02_train_lora_sft.ipynb` | Self-contained bootstrap + LoRA SFT (`STAGE`: S3 edit or S2 MidiCaps) | Drive shards (or builds them) |
 | `03_eval_musicinstruct.ipynb` | Self-contained bootstrap + infer/score | Drive LoRA adapters from 02 |
 
 Notebooks **02** and **03** clone repos and install deps automatically. If Drive has no shards yet, **02** will build them (slower first run).
