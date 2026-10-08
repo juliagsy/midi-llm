@@ -2,7 +2,7 @@
 
 import pytest
 
-from midi_llm.train.sft_tokenize import tokenize_sft_example
+from midi_llm.train.sft_tokenize import SFTExampleUnfit, tokenize_sft_example
 
 
 class _FakeTokenizer:
@@ -38,11 +38,31 @@ def test_all_masked_example_raises() -> None:
         )
 
 
+def test_edit_prompt_truncates_midi_not_instruction() -> None:
+    tokenizer = _FakeTokenizer()
+    midi_payload = " ".join(str(i) for i in range(400))
+    prompt = (
+        "### Task\nEdit the input MIDI according to the instruction.\n\n"
+        "### Instruction\nTranspose up 3 semitones.\n\n"
+        f"### MIDI (REMI tokens)\n{midi_payload}\n"
+        "### Output MIDI\n"
+    )
+    ids, labels, meta = tokenize_sft_example(
+        tokenizer,
+        prompt=prompt,
+        completion="1 2 3 4 5 6 7 8 9",
+        max_seq_len=128,
+    )
+    assert len(ids) <= 128
+    assert meta.prompt_truncated
+    assert any(label != -100 for label in labels)
+
+
 def test_instruction_loss_raises() -> None:
     tokenizer = _FakeTokenizer()
     prompt = "### Task\nEdit\n\n### Instruction\nTranspose up.\n\n" + ("m" * 200)
     completion = "out"
-    with pytest.raises(ValueError, match="Instruction"):
+    with pytest.raises(SFTExampleUnfit, match="Instruction"):
         tokenize_sft_example(
             tokenizer,
             prompt=prompt,

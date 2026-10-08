@@ -31,6 +31,19 @@ def format_llama_instruct(prompt: str, completion: str) -> dict[str, str]:
     }
 
 
+def load_sft_records(shard_path: str | Path, *, max_samples: int | None = None) -> list[dict[str, Any]]:
+    """Read prompt/completion rows from a midi-llm SFT JSONL shard."""
+    records: list[dict[str, Any]] = []
+    path = Path(shard_path)
+    for _line_no, record in iter_jsonl(path, required_fields=SFT_FIELDS, label="SFT shard"):
+        records.append(record)
+        if max_samples is not None and len(records) >= max_samples:
+            break
+    if not records:
+        raise RuntimeError(f"SFT shard is empty or invalid: {path}")
+    return records
+
+
 class SFTJsonlDataset(Dataset):
     """Load midi-llm JSONL shards (prompt/completion records)."""
 
@@ -40,15 +53,16 @@ class SFTJsonlDataset(Dataset):
         *,
         max_samples: int | None = None,
         chat_template: bool = True,
+        records: list[dict[str, Any]] | None = None,
     ) -> None:
-        self.records: list[dict[str, Any]] = []
-        path = Path(shard_path)
-        for _line_no, record in iter_jsonl(path, required_fields=SFT_FIELDS, label="SFT shard"):
-            self.records.append(record)
-            if max_samples is not None and len(self.records) >= max_samples:
-                break
+        if records is not None:
+            self.records = list(records)
+        else:
+            self.records = load_sft_records(shard_path, max_samples=max_samples)
+        if max_samples is not None:
+            self.records = self.records[:max_samples]
         if not self.records:
-            raise RuntimeError(f"SFT shard is empty or invalid: {path}")
+            raise RuntimeError(f"SFT shard is empty or invalid: {shard_path}")
         self.chat_template = chat_template
 
     def __len__(self) -> int:

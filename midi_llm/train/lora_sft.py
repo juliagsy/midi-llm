@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import inspect
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
 from midi_llm.config import load_config
 from midi_llm.config_helpers import resolve_grad_accum_steps
 from midi_llm.reproducibility import set_global_seed
-from midi_llm.train.sft_tokenize import tokenize_sft_example
+from midi_llm.train.dataset import SFTJsonlDataset, format_llama_instruct, load_sft_records
+from midi_llm.train.sft_tokenize import SFTExampleUnfit, tokenize_sft_example
 from midi_llm.train.shard_meta import resolve_repr_name
+
+logger = logging.getLogger(__name__)
 
 
 def _warmup_scheduler_kwargs(
@@ -39,19 +43,58 @@ def _require_train_deps():
     return torch, LoraConfig, TaskType, get_peft_model, AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
 
 
+def filter_sft_records_for_seq_len(
+    records: list[dict[str, Any]],
+    tokenizer,
+    *,
+    max_seq_len: int,
+    chat_template: bool = True,
+) -> tuple[list[dict[str, Any]], int]:
+    """Drop rows that cannot fit ``max_seq_len`` with the edit instruction preserved."""
+    kept: list[dict[str, Any]] = []
+    skipped = 0
+    for record in records:
+        prompt = record.get("prompt", "")
+        completion = record.get("completion", "")
+        if chat_template:
+            parts = format_llama_instruct(prompt, completion)
+            prompt, completion = parts["prompt"], parts["completion"]
+        try:
+            tokenize_sft_example(
+                tokenizer,
+                prompt=prompt,
+                completion=completion,
+                max_seq_len=max_seq_len,
+            )
+        except (SFTExampleUnfit, ValueError):
+            skipped += 1
+            continue
+        kept.append(record)
+    return kept, skipped
+
+
 def _tokenize_batch(examples: dict[str, list[str]], tokenizer, max_seq_len: int) -> dict[str, Any]:
     torch, *_ = _require_train_deps()
     input_ids = []
     labels = []
     for prompt, completion in zip(examples["prompt"], examples["completion"], strict=True):
-        ids, label, _meta = tokenize_sft_example(
-            tokenizer,
-            prompt=prompt,
-            completion=completion,
-            max_seq_len=max_seq_len,
-        )
+        try:
+            ids, label, _meta = tokenize_sft_example(
+                tokenizer,
+                prompt=prompt,
+                completion=completion,
+                max_seq_len=max_seq_len,
+            )
+        except (SFTExampleUnfit, ValueError):
+            continue
         input_ids.append(ids)
         labels.append(label)
+
+    if not input_ids:
+        raise RuntimeError(
+            f"No examples in batch fit max_seq_len={max_seq_len}. "
+            "Increase MAX_SEQ_LEN (real v0.2: 2048) or re-run setup after updating midi-llm."
+        )
 
     max_len = max(len(row) for row in input_ids)
     pad_id = tokenizer.pad_token_id or tokenizer.eos_token_id
@@ -112,8 +155,6 @@ def setup_lora_trainer(
         TrainingArguments,
     ) = _require_train_deps()
 
-    from midi_llm.train.dataset import SFTJsonlDataset
-
     resolved_repr = resolve_repr_name(shard_path, repr_name)
     cfg = load_config(resolved_repr)
     train_seed = 42 if seed is None else seed
@@ -138,7 +179,26 @@ def setup_lora_trainer(
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    dataset = SFTJsonlDataset(shard_path, max_samples=max_samples, chat_template=True)
+    raw_records = load_sft_records(shard_path, max_samples=max_samples)
+    filtered_records, n_skipped = filter_sft_records_for_seq_len(
+        raw_records,
+        tokenizer,
+        max_seq_len=seq_len,
+        chat_template=True,
+    )
+    if n_skipped:
+        logger.warning(
+            "Dropped %s/%s SFT rows that exceed max_seq_len=%s (instruction + completion must fit)",
+            n_skipped,
+            len(raw_records),
+            seq_len,
+        )
+    if not filtered_records:
+        raise RuntimeError(
+            f"No SFT rows fit max_seq_len={seq_len} in {shard_path}. "
+            "Increase max_seq_len (protocol default 2048) or rebuild shards with shorter MIDI."
+        )
+    dataset = SFTJsonlDataset(shard_path, chat_template=True, records=filtered_records)
 
     prec = precision or cfg["model"].get("precision", "bf16")
     use_bf16 = prec == "bf16"
@@ -195,6 +255,8 @@ def setup_lora_trainer(
         "max_seq_len": seq_len,
         "precision": prec,
         "gradient_accumulation_steps": grad_accum,
+        "sft_rows_kept": len(filtered_records),
+        "sft_rows_skipped_seq_len": n_skipped,
     }
     return trainer, out, meta
 

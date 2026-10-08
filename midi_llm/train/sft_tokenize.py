@@ -9,13 +9,54 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 INSTRUCTION_MARKER = "### Instruction"
+OUTPUT_MIDI_HEADER = "### Output MIDI\n"
+MIDI_SECTION_MARKER = "### MIDI"
 MIN_COMPLETION_TOKENS = 8
+
+
+class SFTExampleUnfit(ValueError):
+    """SFT row cannot fit ``max_seq_len`` without breaking the edit template."""
 
 
 @dataclass(frozen=True)
 class SFTTokenizeMeta:
     prompt_truncated: bool
     completion_truncated: bool
+
+
+def _split_edit_prompt(prompt: str) -> tuple[str, str, str] | None:
+    if INSTRUCTION_MARKER not in prompt or OUTPUT_MIDI_HEADER not in prompt:
+        return None
+    if not prompt.endswith(OUTPUT_MIDI_HEADER):
+        return None
+    core = prompt[: -len(OUTPUT_MIDI_HEADER)]
+    midi_pos = core.find(MIDI_SECTION_MARKER)
+    if midi_pos < 0:
+        return None
+    return core[:midi_pos], core[midi_pos:], OUTPUT_MIDI_HEADER
+
+
+def _truncate_edit_prompt_ids(
+    tokenizer: Any,
+    prompt: str,
+    max_prompt_len: int,
+) -> tuple[list[int], bool] | None:
+    """Shorten the input MIDI block while keeping task + instruction headers."""
+    parts = _split_edit_prompt(prompt)
+    if parts is None:
+        return None
+    fixed, midi_block, out_hdr = parts
+    fixed_ids = tokenizer(fixed, add_special_tokens=False)["input_ids"]
+    out_ids = tokenizer(out_hdr, add_special_tokens=False)["input_ids"]
+    reserve = len(fixed_ids) + len(out_ids)
+    if reserve >= max_prompt_len:
+        return None
+    budget = max_prompt_len - reserve
+    midi_ids = tokenizer(midi_block, add_special_tokens=False)["input_ids"]
+    if len(midi_ids) <= budget:
+        return fixed_ids + midi_ids + out_ids, False
+    midi_ids = midi_ids[-budget:]
+    return fixed_ids + midi_ids + out_ids, True
 
 
 def _decode_prompt_ids(tokenizer: Any, prompt_ids: list[int]) -> str:
@@ -41,13 +82,17 @@ def tokenize_sft_example(
     had_instruction = INSTRUCTION_MARKER in prompt
     max_prompt_len = max(0, max_seq_len - MIN_COMPLETION_TOKENS)
     if len(prompt_ids) > max_prompt_len:
-        prompt_ids = prompt_ids[-max_prompt_len:]
-        prompt_truncated = True
-        if had_instruction and INSTRUCTION_MARKER not in _decode_prompt_ids(tokenizer, prompt_ids):
-            raise ValueError(
-                "SFT example lost ### Instruction after prompt truncation; "
-                "increase max_seq_len or drop this row"
-            )
+        smart = _truncate_edit_prompt_ids(tokenizer, prompt, max_prompt_len)
+        if smart is not None:
+            prompt_ids, prompt_truncated = smart
+        else:
+            prompt_ids = prompt_ids[-max_prompt_len:]
+            prompt_truncated = True
+            if had_instruction and INSTRUCTION_MARKER not in _decode_prompt_ids(tokenizer, prompt_ids):
+                raise SFTExampleUnfit(
+                    "SFT example lost ### Instruction after prompt truncation; "
+                    "increase max_seq_len or drop this row"
+                )
 
     ids = prompt_ids + completion_ids
     if len(ids) > max_seq_len:
