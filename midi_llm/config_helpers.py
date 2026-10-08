@@ -102,6 +102,4 @@ def load_eval_item_ids(cfg: dict[str, Any]) -> set[str] | None:
         return {str(item_id) for item_id in data}
     if isinstance(data, dict) and "item_ids" in data:
         return {str(item_id) for item_id in data["item_ids"]}
-    raise ValueError(
-        f"eval item-id file must be a JSON list or {{\"item_ids\": [...]}}: {path}"
-    )
+    raise ValueError(f'eval item-id file must be a JSON list or {{"item_ids": [...]}}: {path}')

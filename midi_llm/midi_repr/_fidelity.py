@@ -131,8 +131,7 @@ def compare_midi_fidelity(
         issues.append(f"track count {n_tracks_source} -> {n_tracks_output}")
     if abs(duration_source - duration_output) > duration_tol_sec:
         issues.append(
-            f"duration {duration_source:.3f}s -> {duration_output:.3f}s "
-            f"(tol {duration_tol_sec}s)"
+            f"duration {duration_source:.3f}s -> {duration_output:.3f}s (tol {duration_tol_sec}s)"
         )
     if recall < min_note_recall:
         issues.append(f"note recall {recall:.3f} < {min_note_recall}")

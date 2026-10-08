@@ -58,9 +58,10 @@ def run_edit_inference(
     count = 0
     n_encode_failed = 0
     n_hit_max_tokens = 0
-    with completions_path.open("w", encoding="utf-8") as writer, encode_failures_path.open(
-        "w", encoding="utf-8"
-    ) as encode_fail_writer:
+    with (
+        completions_path.open("w", encoding="utf-8") as writer,
+        encode_failures_path.open("w", encoding="utf-8") as encode_fail_writer,
+    ):
         for record in iter_manifest_records(manifest_path, split=split):
             if max_items is not None and count >= max_items:
                 break

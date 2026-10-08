@@ -221,7 +221,9 @@ def _cmd_eval_edit(args: argparse.Namespace) -> int:
                 timeout_sec=score_timeout,
             )
             scoring_ok = results.get("overall") is not None
-            scoring_error = None if scoring_ok else "musicinstruct score returned no overall metrics"
+            scoring_error = (
+                None if scoring_ok else "musicinstruct score returned no overall metrics"
+            )
         except (FileNotFoundError, subprocess.CalledProcessError, TimeoutError) as exc:
             scoring_ok = False
             if isinstance(exc, FileNotFoundError):
@@ -323,21 +325,27 @@ def main(argv: list[str] | None = None) -> int:
     rt.add_argument("--json", action="store_true")
     rt.set_defaults(func=_cmd_roundtrip)
 
-    shard = sub.add_parser("build-instruct-shard", help="Build Stage S3 edit SFT JSONL from MIDI-Instruct")
+    shard = sub.add_parser(
+        "build-instruct-shard", help="Build Stage S3 edit SFT JSONL from MIDI-Instruct"
+    )
     shard.add_argument("manifest", help="Path to pilot.jsonl or full manifest")
     shard.add_argument("--repr", required=True, choices=REPR_NAMES)
     shard.add_argument("--output", required=True, help="Output JSONL path")
     shard.add_argument("--split", default="train", help="Split to export (default: train)")
     shard.set_defaults(func=_cmd_build_instruct_shard)
 
-    syntax = sub.add_parser("build-syntax-shard", help="Build Stage S0 syntax JSONL from a MIDI directory")
+    syntax = sub.add_parser(
+        "build-syntax-shard", help="Build Stage S0 syntax JSONL from a MIDI directory"
+    )
     syntax.add_argument("midi_dir", help="Root directory containing .mid files")
     syntax.add_argument("--repr", required=True, choices=REPR_NAMES)
     syntax.add_argument("--output", required=True, help="Output JSONL path")
     syntax.add_argument("--max-files", type=int, default=None, help="Cap number of MIDI files")
     syntax.set_defaults(func=_cmd_build_syntax_shard)
 
-    giga = sub.add_parser("build-gigamidi-shard", help="Build Stage S0 JSONL from HuggingFace GigaMIDI")
+    giga = sub.add_parser(
+        "build-gigamidi-shard", help="Build Stage S0 JSONL from HuggingFace GigaMIDI"
+    )
     giga.add_argument("--repr", required=True, choices=REPR_NAMES)
     giga.add_argument("--output", required=True, help="Output JSONL path")
     giga.add_argument("--split", default="train")
@@ -363,7 +371,9 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Representation arm (required unless shard records include repr_name)",
     )
-    train.add_argument("--seed", type=int, default=42, help="Random seed for training (default: 42)")
+    train.add_argument(
+        "--seed", type=int, default=42, help="Random seed for training (default: 42)"
+    )
     train.add_argument("--max-steps", type=int, default=None)
     train.add_argument(
         "--max-epochs",
@@ -393,7 +403,12 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Stop when eval_loss stalls (needs val shard; 0=off)",
     )
-    train.add_argument("--precision", choices=["fp16", "bf16"], default=None, help="Override config precision (T4: fp16)")
+    train.add_argument(
+        "--precision",
+        choices=["fp16", "bf16"],
+        default=None,
+        help="Override config precision (T4: fp16)",
+    )
     train.set_defaults(func=_cmd_train_lora)
 
     infer = sub.add_parser("infer-edit", help="Run LLM inference on MIDI-Instruct edit items")
@@ -416,7 +431,9 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Sampling temperature (default: eval.temperature in config; 0 = greedy)",
     )
-    infer.add_argument("--seed", type=int, default=42, help="Random seed for sampling (default: 42)")
+    infer.add_argument(
+        "--seed", type=int, default=42, help="Random seed for sampling (default: 42)"
+    )
     infer.set_defaults(func=_cmd_infer_edit)
 
     ev = sub.add_parser("eval-edit", help="Infer, decode, and score MIDI-Instruct edits")
@@ -439,8 +456,12 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Sampling temperature during inference (default: eval.temperature in config)",
     )
-    ev.add_argument("--skip-infer", action="store_true", help="Decode/score existing completions only")
-    ev.add_argument("--completions", default=None, help="Path to completions.jsonl when --skip-infer")
+    ev.add_argument(
+        "--skip-infer", action="store_true", help="Decode/score existing completions only"
+    )
+    ev.add_argument(
+        "--completions", default=None, help="Path to completions.jsonl when --skip-infer"
+    )
     ev.add_argument(
         "--baseline",
         choices=["copy-source"],
@@ -476,7 +497,9 @@ def main(argv: list[str] | None = None) -> int:
     est.add_argument("--batch-size", type=int, default=1)
     est.add_argument("--grad-accum", type=int, default=8)
     est.add_argument("--model", default=None)
-    est.add_argument("--benchmark", action="store_true", help="Run one training step to measure speed")
+    est.add_argument(
+        "--benchmark", action="store_true", help="Run one training step to measure speed"
+    )
     est.set_defaults(func=_cmd_estimate_training)
 
     args = parser.parse_args(argv)

@@ -6,7 +6,9 @@ import pytest
 from midi_llm.data.instruct import build_instruct_shard
 
 
-def test_build_instruct_shard_from_fixture(miditok_available, instruct_mini_manifest: Path, tmp_path: Path):
+def test_build_instruct_shard_from_fixture(
+    miditok_available, instruct_mini_manifest: Path, tmp_path: Path
+):
     if not miditok_available:
         pytest.skip("miditok not installed")
 

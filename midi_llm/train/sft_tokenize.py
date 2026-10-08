@@ -64,7 +64,7 @@ def _wrapped_token_count(
     raw_prompt: str,
     raw_completion: str,
 ) -> int:
-    from midi_llm.train.dataset import format_llama_instruct  # noqa: PLC0415
+    from midi_llm.train.dataset import format_llama_instruct
 
     parts = format_llama_instruct(raw_prompt, raw_completion)
     prompt_ids = tokenizer(parts["prompt"], add_special_tokens=False)["input_ids"]
@@ -93,8 +93,7 @@ def shrink_raw_edit_prompt(
 
     midi_header = midi_block[: header_end + 1]
     midi_body = midi_block[header_end + 1 :]
-    if midi_body.endswith("\n"):
-        midi_body = midi_body[:-1]
+    midi_body = midi_body.removesuffix("\n")
 
     body_ids = tokenizer(midi_body, add_special_tokens=False)["input_ids"]
     truncated = False
@@ -123,7 +122,7 @@ def tokenize_sft_record(
     prompt_truncated = False
     raw_p = raw_prompt
     if chat_template:
-        from midi_llm.train.dataset import format_llama_instruct  # noqa: PLC0415
+        from midi_llm.train.dataset import format_llama_instruct
 
         raw_p, prompt_truncated = shrink_raw_edit_prompt(
             tokenizer,
@@ -178,7 +177,9 @@ def tokenize_sft_example(
         else:
             prompt_ids = prompt_ids[-max_prompt_len:]
             prompt_truncated = True
-            if had_instruction and INSTRUCTION_MARKER not in _decode_prompt_ids(tokenizer, prompt_ids):
+            if had_instruction and INSTRUCTION_MARKER not in _decode_prompt_ids(
+                tokenizer, prompt_ids
+            ):
                 raise SFTExampleUnfit(
                     "SFT example lost ### Instruction after prompt truncation; "
                     "increase max_seq_len or drop this row"

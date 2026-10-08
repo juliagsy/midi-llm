@@ -37,7 +37,9 @@ def build_caption_to_midi(
     midi_payload: str,
     item_id: str | None = None,
 ) -> SFTExample:
-    prompt = f"### Task\nGenerate MIDI from the caption.\n\n### Caption\n{caption.strip()}\n\n### MIDI\n"
+    prompt = (
+        f"### Task\nGenerate MIDI from the caption.\n\n### Caption\n{caption.strip()}\n\n### MIDI\n"
+    )
     completion = midi_payload.strip()
     return SFTExample(
         task=TaskKind.CAPTION_TO_MIDI,
@@ -56,9 +58,7 @@ def build_midi_to_caption(
     item_id: str | None = None,
 ) -> SFTExample:
     prompt = (
-        "### Task\nDescribe the MIDI.\n\n"
-        f"{_wrap_midi_block(repr_name, midi_payload)}"
-        "### Caption\n"
+        f"### Task\nDescribe the MIDI.\n\n{_wrap_midi_block(repr_name, midi_payload)}### Caption\n"
     )
     completion = caption.strip()
     return SFTExample(

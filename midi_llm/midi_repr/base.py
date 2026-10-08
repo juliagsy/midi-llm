@@ -90,7 +90,9 @@ class MidiRepresentation(ABC):
     ) -> Path:
         raise NotImplementedError
 
-    def roundtrip(self, midi_path: str | Path, output_dir: str | Path | None = None) -> RoundTripResult:
+    def roundtrip(
+        self, midi_path: str | Path, output_dir: str | Path | None = None
+    ) -> RoundTripResult:
         from .payload import deserialize_midi_payload, serialize_midi_payload
 
         source = Path(midi_path)

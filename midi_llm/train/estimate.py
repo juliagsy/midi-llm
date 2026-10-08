@@ -114,7 +114,11 @@ def micro_benchmark_step(
     except ImportError:
         return None
 
-    device = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
+    device = (
+        "cuda"
+        if torch.cuda.is_available()
+        else ("mps" if torch.backends.mps.is_available() else "cpu")
+    )
     try:
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
@@ -159,10 +163,16 @@ def estimate_training(
     backbone = model_name or cfg["model"]["backbone"]
     step_key = stage if stage.startswith("s") else f"s{stage}"
     if steps is None:
-        steps = cfg["training"]["max_steps"].get(step_key, cfg["training"]["max_steps"]["s3_edit_lora"])
+        steps = cfg["training"]["max_steps"].get(
+            step_key, cfg["training"]["max_steps"]["s3_edit_lora"]
+        )
 
     profile = detect_hardware()
-    secs = micro_benchmark_step(backbone, seq_len=seq_len, batch_size=batch_size) if run_benchmark else None
+    secs = (
+        micro_benchmark_step(backbone, seq_len=seq_len, batch_size=batch_size)
+        if run_benchmark
+        else None
+    )
     if secs is None:
         secs = _fallback_secs_per_step(profile)
         bench_note = "heuristic (run with --benchmark for measured)"

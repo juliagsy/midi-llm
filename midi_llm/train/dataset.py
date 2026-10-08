@@ -10,6 +10,7 @@ from midi_llm.data.jsonl_io import SFT_FIELDS, iter_jsonl
 try:
     from torch.utils.data import Dataset
 except ImportError:  # pragma: no cover - train extra not installed
+
     class Dataset:  # type: ignore[no-redef]
         """Fallback when torch is unavailable outside training."""
 
@@ -31,7 +32,9 @@ def format_llama_instruct(prompt: str, completion: str) -> dict[str, str]:
     }
 
 
-def load_sft_records(shard_path: str | Path, *, max_samples: int | None = None) -> list[dict[str, Any]]:
+def load_sft_records(
+    shard_path: str | Path, *, max_samples: int | None = None
+) -> list[dict[str, Any]]:
     """Read prompt/completion rows from a midi-llm SFT JSONL shard."""
     records: list[dict[str, Any]] = []
     path = Path(shard_path)

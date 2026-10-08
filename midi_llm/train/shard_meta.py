@@ -57,8 +57,6 @@ def resolve_repr_name(shard_path: str | Path, repr_name: str | None) -> str:
     else:
         resolved = repr_name.strip().lower()
         if inferred is not None and inferred != resolved:
-            raise ValueError(
-                f"shard repr_name={inferred!r} conflicts with --repr={resolved!r}"
-            )
+            raise ValueError(f"shard repr_name={inferred!r} conflicts with --repr={resolved!r}")
     validate_repr_protocol(resolved)
     return resolved

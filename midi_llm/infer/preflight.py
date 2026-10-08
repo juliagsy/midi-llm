@@ -49,9 +49,7 @@ def preflight_manifest(
         count += 1
 
     if count == 0:
-        raise RuntimeError(
-            f"manifest preflight found zero items for split={split!r} in {manifest}"
-        )
+        raise RuntimeError(f"manifest preflight found zero items for split={split!r} in {manifest}")
 
     if missing and fail_on_missing:
         preview = ", ".join(missing[:5])
@@ -119,15 +117,12 @@ def preflight_encode(
             )
 
     if count == 0:
-        raise RuntimeError(
-            f"encode preflight found zero items for split={split!r} in {manifest}"
-        )
+        raise RuntimeError(f"encode preflight found zero items for split={split!r} in {manifest}")
 
     if failures and fail_on_encode_error:
         preview = failures[0]["item_id"]
         raise RuntimeError(
-            f"encode preflight failed: {len(failures)}/{count} items "
-            f"(first item_id={preview})"
+            f"encode preflight failed: {len(failures)}/{count} items (first item_id={preview})"
         )
 
     return EncodePreflightReport(
@@ -137,7 +132,9 @@ def preflight_encode(
     )
 
 
-def summarize_manifest_skips(manifest_path: str | Path, *, split: str | None = "test") -> Counter[str]:
+def summarize_manifest_skips(
+    manifest_path: str | Path, *, split: str | None = "test"
+) -> Counter[str]:
     """Count non-fatal manifest skip reasons (for diagnostics)."""
     manifest = Path(manifest_path)
     root = manifest.parent

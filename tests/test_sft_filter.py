@@ -1,7 +1,7 @@
 import pytest
 
 from midi_llm.train.lora_sft import filter_sft_records_for_seq_len
-from midi_llm.train.sft_tokenize import SFTExampleUnfit, tokenize_sft_example, tokenize_sft_record
+from midi_llm.train.sft_tokenize import SFTExampleUnfit, tokenize_sft_example
 
 
 class _FakeTokenizer:
@@ -42,6 +42,4 @@ def test_unfit_is_skipped_not_raised_in_filter() -> None:
     assert skipped_unfit == 1
     assert skipped_truncated == 0
     with pytest.raises(SFTExampleUnfit):
-        tokenize_sft_example(
-            tokenizer, prompt=prompt, completion="out", max_seq_len=64
-        )
+        tokenize_sft_example(tokenizer, prompt=prompt, completion="out", max_seq_len=64)

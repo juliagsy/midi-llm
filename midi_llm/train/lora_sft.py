@@ -41,7 +41,16 @@ def _require_train_deps():
         from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
     except ImportError as exc:
         raise ImportError("Training requires: pip install -e '.[train]'") from exc
-    return torch, LoraConfig, TaskType, get_peft_model, AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
+    return (
+        torch,
+        LoraConfig,
+        TaskType,
+        get_peft_model,
+        AutoModelForCausalLM,
+        AutoTokenizer,
+        Trainer,
+        TrainingArguments,
+    )
 
 
 def filter_sft_records_for_seq_len(

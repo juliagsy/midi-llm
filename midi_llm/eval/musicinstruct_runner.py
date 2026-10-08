@@ -56,9 +56,10 @@ def predictions_from_completions(
     fail_path = Path(failures_path) if failures_path else predictions_root / "decode_failures.jsonl"
     seen_item_ids: set[str] = set()
 
-    with Path(output_predictions).open("w", encoding="utf-8") as dst, fail_path.open(
-        "w", encoding="utf-8"
-    ) as fail_writer:
+    with (
+        Path(output_predictions).open("w", encoding="utf-8") as dst,
+        fail_path.open("w", encoding="utf-8") as fail_writer,
+    ):
         for line_no, row in iter_jsonl(
             completions_path,
             required_fields=COMPLETION_FIELDS,

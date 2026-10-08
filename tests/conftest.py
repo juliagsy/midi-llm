@@ -20,7 +20,9 @@ def sample_midi(tmp_path: Path) -> Path:
     beat = 0.5
     for i in range(8):
         t0 = i * beat
-        piano.notes.append(pretty_midi.Note(velocity=80, pitch=60 + (i % 4), start=t0, end=t0 + 0.4))
+        piano.notes.append(
+            pretty_midi.Note(velocity=80, pitch=60 + (i % 4), start=t0, end=t0 + 0.4)
+        )
         if i % 2 == 0:
             drums.notes.append(pretty_midi.Note(velocity=100, pitch=36, start=t0, end=t0 + 0.05))
     midi.instruments.extend([piano, drums])

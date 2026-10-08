@@ -93,8 +93,10 @@ def test_iter_manifest_records(tmp_path: Path):
     manifest = tmp_path / "m.jsonl"
     base = {"midi_in": "in.mid", "instruction": "test"}
     manifest.write_text(
-        json.dumps({"item_id": "a", "split": "train", **base}) + "\n"
-        + json.dumps({"item_id": "b", "split": "test", **base}) + "\n",
+        json.dumps({"item_id": "a", "split": "train", **base})
+        + "\n"
+        + json.dumps({"item_id": "b", "split": "test", **base})
+        + "\n",
         encoding="utf-8",
     )
     ids = [r["item_id"] for r in iter_manifest_records(manifest, split="test")]

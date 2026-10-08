@@ -9,7 +9,6 @@ from midi_llm.config_helpers import (
     resolve_max_new_tokens,
     resolve_s3_grad_accum_steps,
     resolve_score_timeout_sec,
-    s3_steps_per_epoch,
 )
 
 

@@ -184,9 +184,10 @@ def copy_source_as_baseline(
         Path(failures_path) if failures_path else predictions_root / "copy_source_failures.jsonl"
     )
 
-    with Path(output_predictions).open("w", encoding="utf-8") as dst, fail_path.open(
-        "w", encoding="utf-8"
-    ) as fail_writer:
+    with (
+        Path(output_predictions).open("w", encoding="utf-8") as dst,
+        fail_path.open("w", encoding="utf-8") as fail_writer,
+    ):
         written_limit = max_items
         for line_no, record in iter_jsonl(
             manifest,
