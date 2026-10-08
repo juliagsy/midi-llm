@@ -42,12 +42,13 @@ midi-llm roundtrip path/to/file.mid --repr remi
 midi-llm token-stats path/to/file.mid
 midi-llm token-stats path/to/file.mid --json
 
-# Build SFT JSONL from a MIDI-Instruct manifest (train split)
+# Build SFT JSONL from a MIDI-Instruct manifest (train split; pilot or real v0.2)
 midi-llm build-instruct-shard \
   ../musicinstruct/data/pilot/pilot.jsonl \
   --repr remi \
   --output data/shards/instruct_remi.jsonl \
   --split train
+# Real v0.2: ../musicinstruct/data/v0.2/manifest.jsonl — see colab/README.md
 
 # Stage S0 from local MIDIs or GigaMIDI (HF)
 midi-llm build-syntax-shard path/to/midis --repr remi --output data/shards/syntax_remi.jsonl

@@ -28,7 +28,7 @@ Fields: `n_bpe_tokens`, `bpe_tokens_per_note` (Llama BPE on the serialized paylo
 - Context: `model.max_seq_len` = 2048 tokens
 - Edit generation cap: `eval.max_new_tokens` = 1024 tokens
 - Optimizer / LR / schedule: see `configs/base.yaml`
-- S3 data: MIDI-Instruct train split (unique-gold)
+- S3 data: MIDI-Instruct train split (unique-gold); pilot (`pilot_v1`, 200 train) or real v0.2 (`real_v0.2_v1`, ~645 train)
 - S3 adapter: LoRA rank 16 (all arms)
 
 ## Training stages
@@ -50,8 +50,9 @@ midi-llm build-syntax-shard MIDI_DIR --repr remi --output data/shards/syntax_rem
 midi-llm build-midicaps-shard --midi-root /path/to/midicaps --repr remi \
   --output data/shards/midicaps_remi.jsonl --limit 1000
 
-# S3 editing
-midi-llm build-instruct-shard MANIFEST.jsonl --repr remi --output data/shards/edit_remi.jsonl --split train
+# S3 editing (pilot or real v0.2 manifest — same schema)
+midi-llm build-instruct-shard ../musicinstruct/data/v0.2/manifest.jsonl \
+  --repr remi --output data/shards/real_v0.2_v1/edit_remi_train.jsonl --split train
 
 # S3 LoRA pilot
 midi-llm train-lora data/shards/edit_remi.jsonl --output-dir runs/remi_lora --repr remi --max-steps 50
