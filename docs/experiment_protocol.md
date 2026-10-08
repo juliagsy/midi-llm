@@ -54,8 +54,9 @@ midi-llm build-midicaps-shard --midi-root /path/to/midicaps --repr remi \
 midi-llm build-instruct-shard ../musicinstruct/data/v0.2/manifest.jsonl \
   --repr remi --output data/shards/real_v0.2_v1/edit_remi_train.jsonl --split train
 
-# S3 LoRA pilot
+# S3 LoRA (steps capped by training.s3_max_epochs; grad_accum capped by s3_grad_accum_cap)
 midi-llm train-lora data/shards/edit_remi.jsonl --output-dir runs/remi_lora --repr remi --max-steps 50
+# Uses sibling edit_*_validation.jsonl for eval + early stopping when present
 ```
 
 ## Evaluation (Paper 2 scope)

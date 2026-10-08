@@ -2,17 +2,37 @@ import json
 from pathlib import Path
 
 from midi_llm.config_helpers import (
+    cap_s3_max_steps,
     load_eval_item_ids,
     resolve_eval_temperature,
     resolve_grad_accum_steps,
     resolve_max_new_tokens,
+    resolve_s3_grad_accum_steps,
     resolve_score_timeout_sec,
+    s3_steps_per_epoch,
 )
 
 
 def test_resolve_grad_accum_from_token_budget() -> None:
     cfg = {"training": {"effective_batch_tokens": 4096}}
     assert resolve_grad_accum_steps(cfg, seq_len=512, batch_size=1) == 8
+
+
+def test_s3_grad_accum_cap() -> None:
+    cfg = {"training": {"effective_batch_tokens": 524288, "s3_grad_accum_cap": 8}}
+    assert resolve_s3_grad_accum_steps(cfg, seq_len=2048, batch_size=1) == 8
+
+
+def test_cap_s3_max_steps_by_epochs() -> None:
+    steps, spe = cap_s3_max_steps(
+        645,
+        batch_size=1,
+        grad_accum=8,
+        max_epochs=3,
+        requested_steps=300,
+    )
+    assert spe == 81
+    assert steps == 243
 
 
 def test_resolve_grad_accum_honors_override() -> None:

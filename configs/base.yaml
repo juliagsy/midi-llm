@@ -11,9 +11,14 @@ model:
 training:
   optimizer: adamw
   learning_rate: 2.0e-4
+  weight_decay: 0.01
   lr_schedule: cosine
   warmup_ratio: 0.03
   effective_batch_tokens: 524288  # 512K (S0/S1); use 1048576 for S2
+  # S3 edit LoRA: cap micro-batch accum (524288/2048=256 is too many passes over ~645 rows)
+  s3_grad_accum_cap: 8
+  s3_max_epochs: 3
+  s3_early_stopping_patience: 5  # 0 = disabled (requires validation shard)
   max_steps:
     s0_syntax: 5000
     s1_cpt: 25000

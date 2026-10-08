@@ -143,13 +143,17 @@ def _cmd_train_lora(args: argparse.Namespace) -> int:
         args.output_dir,
         repr_name=args.repr,
         max_steps=args.max_steps,
+        max_epochs=args.max_epochs,
         max_seq_len=args.max_seq_len,
         max_samples=args.max_samples,
+        val_shard_path=args.val_shard,
         per_device_batch_size=args.batch_size,
         gradient_accumulation_steps=args.grad_accum,
         learning_rate=args.learning_rate,
+        weight_decay=args.weight_decay,
         precision=args.precision,
         seed=args.seed,
+        early_stopping_patience=args.early_stopping_patience,
     )
     print(f"saved LoRA adapter to {out / 'lora_adapter'}")
     return 0
@@ -361,8 +365,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     train.add_argument("--seed", type=int, default=42, help="Random seed for training (default: 42)")
     train.add_argument("--max-steps", type=int, default=None)
+    train.add_argument(
+        "--max-epochs",
+        type=float,
+        default=None,
+        help="Cap training to this many passes over the train shard (default: training.s3_max_epochs)",
+    )
     train.add_argument("--max-seq-len", type=int, default=None)
     train.add_argument("--max-samples", type=int, default=None)
+    train.add_argument(
+        "--val-shard",
+        default=None,
+        help="Validation JSONL (default: sibling edit_*_validation.jsonl)",
+    )
     train.add_argument("--batch-size", type=int, default=1)
     train.add_argument(
         "--grad-accum",
@@ -371,6 +386,13 @@ def main(argv: list[str] | None = None) -> int:
         help="Gradient accumulation steps (default: derived from training.effective_batch_tokens)",
     )
     train.add_argument("--learning-rate", type=float, default=None)
+    train.add_argument("--weight-decay", type=float, default=None)
+    train.add_argument(
+        "--early-stopping-patience",
+        type=int,
+        default=None,
+        help="Stop when eval_loss stalls (needs val shard; 0=off)",
+    )
     train.add_argument("--precision", choices=["fp16", "bf16"], default=None, help="Override config precision (T4: fp16)")
     train.set_defaults(func=_cmd_train_lora)
 

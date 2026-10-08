@@ -9,11 +9,12 @@ from pathlib import Path
 from typing import Any
 
 from midi_llm.config import load_config
-from midi_llm.config_helpers import resolve_grad_accum_steps
+from midi_llm.config_helpers import cap_s3_max_steps, resolve_s3_grad_accum_steps
 from midi_llm.reproducibility import set_global_seed
 from midi_llm.train.dataset import SFTJsonlDataset, format_llama_instruct, load_sft_records
 from midi_llm.train.sft_tokenize import SFTExampleUnfit, tokenize_sft_example
 from midi_llm.train.shard_meta import resolve_repr_name
+from midi_llm.train.shard_paths import infer_validation_shard
 
 logger = logging.getLogger(__name__)
 
@@ -138,15 +139,19 @@ def setup_lora_trainer(
     *,
     repr_name: str | None = None,
     max_steps: int | None = None,
+    max_epochs: float | None = None,
     max_seq_len: int | None = None,
     max_samples: int | None = None,
+    val_shard_path: str | Path | None = None,
     per_device_batch_size: int = 1,
     gradient_accumulation_steps: int | None = None,
     learning_rate: float | None = None,
+    weight_decay: float | None = None,
     precision: str | None = None,
     seed: int | None = None,
     logging_steps: int = 10,
     save_steps: int = 200,
+    early_stopping_patience: int | None = None,
 ):
     """Build a HuggingFace Trainer for LoRA SFT (call ``save_lora_artifacts`` after train)."""
     (
@@ -167,10 +172,13 @@ def setup_lora_trainer(
 
     model_name = cfg["model"]["backbone"]
     seq_len = max_seq_len or cfg["model"]["max_seq_len"]
-    lr = learning_rate or cfg["training"]["learning_rate"]
-    steps = max_steps or cfg["training"]["max_steps"]["s3_edit_lora"]
+    train_cfg = cfg["training"]
+    lr = learning_rate or train_cfg["learning_rate"]
+    requested_steps = max_steps if max_steps is not None else train_cfg["max_steps"]["s3_edit_lora"]
+    epochs = float(max_epochs if max_epochs is not None else train_cfg.get("s3_max_epochs", 3))
+    wd = weight_decay if weight_decay is not None else float(train_cfg.get("weight_decay", 0.0))
     lora_cfg = cfg["lora"]
-    grad_accum = resolve_grad_accum_steps(
+    grad_accum = resolve_s3_grad_accum_steps(
         cfg,
         seq_len=seq_len,
         batch_size=per_device_batch_size,
@@ -211,7 +219,51 @@ def setup_lora_trainer(
             f"No SFT rows fit max_seq_len={seq_len} in {shard_path}. "
             "Increase max_seq_len (protocol default 2048) or rebuild shards with shorter MIDI."
         )
+    n_train = len(filtered_records)
+    steps, steps_per_epoch = cap_s3_max_steps(
+        n_train,
+        batch_size=per_device_batch_size,
+        grad_accum=grad_accum,
+        max_epochs=epochs,
+        requested_steps=requested_steps,
+    )
+    if steps < requested_steps:
+        logger.warning(
+            "Capped max_steps %s → %s (~%.1f epochs over %s train rows; s3_max_epochs=%s)",
+            requested_steps,
+            steps,
+            steps / steps_per_epoch,
+            n_train,
+            epochs,
+        )
+
     dataset = SFTJsonlDataset(shard_path, chat_template=True, records=filtered_records)
+
+    val_records: list[dict[str, Any]] | None = None
+    val_path = Path(val_shard_path) if val_shard_path else infer_validation_shard(shard_path)
+    if val_path is not None and val_path.is_file():
+        raw_val = load_sft_records(val_path)
+        val_records, val_unfit, val_trunc = filter_sft_records_for_seq_len(
+            raw_val,
+            tokenizer,
+            max_seq_len=seq_len,
+            chat_template=True,
+            require_full_fit=True,
+        )
+        if val_unfit or val_trunc:
+            logger.warning(
+                "Validation shard dropped unfit=%s truncated=%s (kept %s)",
+                val_unfit,
+                val_trunc,
+                len(val_records),
+            )
+        if not val_records:
+            val_records = None
+            val_path = None
+
+    eval_dataset = None
+    if val_records:
+        eval_dataset = SFTJsonlDataset(val_path, chat_template=True, records=val_records)
 
     prec = precision or cfg["model"].get("precision", "bf16")
     use_bf16 = prec == "bf16"
@@ -250,6 +302,23 @@ def setup_lora_trainer(
         extra_ta["gradient_checkpointing"] = True
     if "dataloader_pin_memory" in ta_params:
         extra_ta["dataloader_pin_memory"] = False
+    if "weight_decay" in ta_params:
+        extra_ta["weight_decay"] = wd
+
+    eval_steps = max(5, min(save_steps, max(1, steps // 10)))
+    if eval_dataset is not None:
+        if "eval_strategy" in ta_params:
+            extra_ta["eval_strategy"] = "steps"
+            extra_ta["eval_steps"] = eval_steps
+        elif "evaluation_strategy" in ta_params:
+            extra_ta["evaluation_strategy"] = "steps"
+            extra_ta["eval_steps"] = eval_steps
+        if "load_best_model_at_end" in ta_params:
+            extra_ta["load_best_model_at_end"] = True
+        if "metric_for_best_model" in ta_params:
+            extra_ta["metric_for_best_model"] = "eval_loss"
+        if "greater_is_better" in ta_params:
+            extra_ta["greater_is_better"] = False
 
     args = TrainingArguments(
         output_dir=str(out),
@@ -258,7 +327,7 @@ def setup_lora_trainer(
         gradient_accumulation_steps=grad_accum,
         learning_rate=lr,
         **warmup_kwargs,
-        lr_scheduler_type=cfg["training"]["lr_schedule"],
+        lr_scheduler_type=train_cfg["lr_schedule"],
         logging_steps=logging_steps,
         save_steps=save_steps,
         save_total_limit=2,
@@ -272,32 +341,54 @@ def setup_lora_trainer(
     )
 
     logger.info(
-        "LoRA SFT: seq_len=%s batch=%s grad_accum=%s train_rows=%s (from %s shard rows)",
+        "LoRA SFT: seq_len=%s batch=%s grad_accum=%s steps=%s (~%.2f epochs) "
+        "train_rows=%s (from %s shard rows)%s",
         seq_len,
         per_device_batch_size,
         grad_accum,
-        len(filtered_records),
+        steps,
+        steps / steps_per_epoch,
+        n_train,
         len(raw_records),
+        f" val_rows={len(val_records)}" if val_records else "",
     )
+
+    callbacks = []
+    patience = early_stopping_patience
+    if patience is None:
+        patience = int(train_cfg.get("s3_early_stopping_patience", 0))
+    if eval_dataset is not None and patience > 0:
+        from transformers import EarlyStoppingCallback
+
+        callbacks.append(EarlyStoppingCallback(early_stopping_patience=patience))
 
     trainer = Trainer(
         model=model,
         args=args,
         train_dataset=dataset,
+        eval_dataset=eval_dataset,
         data_collator=_SFTCollator(tokenizer, seq_len),
+        callbacks=callbacks or None,
     )
     meta = {
         "repr_name": resolved_repr,
         "shard_path": str(shard_path),
+        "val_shard_path": str(val_path) if val_records and val_path else None,
         "model": model_name,
         "seed": train_seed,
         "max_steps": steps,
+        "max_steps_requested": requested_steps,
+        "s3_max_epochs": epochs,
+        "s3_steps_per_epoch": steps_per_epoch,
         "max_seq_len": seq_len,
         "precision": prec,
+        "weight_decay": wd,
         "gradient_accumulation_steps": grad_accum,
-        "sft_rows_kept": len(filtered_records),
+        "sft_rows_kept": n_train,
         "sft_rows_skipped_unfit": n_skipped_unfit,
         "sft_rows_skipped_truncated": n_skipped_truncated,
+        "sft_val_rows_kept": len(val_records) if val_records else 0,
+        "early_stopping_patience": patience if eval_dataset is not None else 0,
     }
     return trainer, out, meta
 
@@ -322,15 +413,19 @@ def train_lora_sft(
     *,
     repr_name: str | None = None,
     max_steps: int | None = None,
+    max_epochs: float | None = None,
     max_seq_len: int | None = None,
     max_samples: int | None = None,
+    val_shard_path: str | Path | None = None,
     per_device_batch_size: int = 1,
     gradient_accumulation_steps: int | None = None,
     learning_rate: float | None = None,
+    weight_decay: float | None = None,
     precision: str | None = None,
     seed: int | None = None,
     logging_steps: int = 10,
     save_steps: int = 200,
+    early_stopping_patience: int | None = None,
 ) -> Path:
     """Fine-tune Llama with LoRA on a midi-llm JSONL shard."""
     trainer, out, meta = setup_lora_trainer(
@@ -338,15 +433,19 @@ def train_lora_sft(
         output_dir,
         repr_name=repr_name,
         max_steps=max_steps,
+        max_epochs=max_epochs,
         max_seq_len=max_seq_len,
         max_samples=max_samples,
+        val_shard_path=val_shard_path,
         per_device_batch_size=per_device_batch_size,
         gradient_accumulation_steps=gradient_accumulation_steps,
         learning_rate=learning_rate,
+        weight_decay=weight_decay,
         precision=precision,
         seed=seed,
         logging_steps=logging_steps,
         save_steps=save_steps,
+        early_stopping_patience=early_stopping_patience,
     )
     trainer.train()
     save_lora_artifacts(trainer, out, meta)
