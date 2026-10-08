@@ -1,7 +1,7 @@
 import pytest
 
 from midi_llm.train.lora_sft import filter_sft_records_for_seq_len
-from midi_llm.train.sft_tokenize import SFTExampleUnfit, tokenize_sft_example
+from midi_llm.train.sft_tokenize import SFTExampleUnfit, tokenize_sft_example, tokenize_sft_record
 
 
 class _FakeTokenizer:

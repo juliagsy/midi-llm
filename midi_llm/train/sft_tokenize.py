@@ -59,6 +59,96 @@ def _truncate_edit_prompt_ids(
     return fixed_ids + midi_ids + out_ids, True
 
 
+def _wrapped_token_count(
+    tokenizer: Any,
+    raw_prompt: str,
+    raw_completion: str,
+) -> int:
+    from midi_llm.train.dataset import format_llama_instruct  # noqa: PLC0415
+
+    parts = format_llama_instruct(raw_prompt, raw_completion)
+    prompt_ids = tokenizer(parts["prompt"], add_special_tokens=False)["input_ids"]
+    completion_ids = tokenizer(parts["completion"], add_special_tokens=False)["input_ids"]
+    return len(prompt_ids) + len(completion_ids)
+
+
+def shrink_raw_edit_prompt(
+    tokenizer: Any,
+    raw_prompt: str,
+    raw_completion: str,
+    max_seq_len: int,
+) -> tuple[str, bool]:
+    """Shorten the MIDI payload in a shard edit prompt until the Llama-wrapped row fits."""
+    if _wrapped_token_count(tokenizer, raw_prompt, raw_completion) <= max_seq_len:
+        return raw_prompt, False
+
+    parts = _split_edit_prompt(raw_prompt)
+    if parts is None:
+        raise SFTExampleUnfit("SFT row is not a shard edit prompt")
+
+    fixed, midi_block, out_hdr = parts
+    header_end = midi_block.find("\n", midi_block.find(MIDI_SECTION_MARKER))
+    if header_end < 0:
+        raise SFTExampleUnfit("SFT row has a malformed MIDI block")
+
+    midi_header = midi_block[: header_end + 1]
+    midi_body = midi_block[header_end + 1 :]
+    if midi_body.endswith("\n"):
+        midi_body = midi_body[:-1]
+
+    body_ids = tokenizer(midi_body, add_special_tokens=False)["input_ids"]
+    truncated = False
+    while body_ids:
+        candidate = f"{fixed}{midi_header}{tokenizer.decode(body_ids)}\n{out_hdr}"
+        if _wrapped_token_count(tokenizer, candidate, raw_completion) <= max_seq_len:
+            return candidate, truncated
+        truncated = True
+        cut = max(1, len(body_ids) // 10)
+        body_ids = body_ids[cut:]
+
+    raise SFTExampleUnfit(
+        "SFT row cannot fit max_seq_len even with an empty MIDI payload; increase max_seq_len"
+    )
+
+
+def tokenize_sft_record(
+    tokenizer: Any,
+    *,
+    raw_prompt: str,
+    raw_completion: str,
+    max_seq_len: int,
+    chat_template: bool = True,
+) -> tuple[list[int], list[int], SFTTokenizeMeta]:
+    """Tokenize one JSONL shard row (raw edit prompt/completion)."""
+    prompt_truncated = False
+    raw_p = raw_prompt
+    if chat_template:
+        from midi_llm.train.dataset import format_llama_instruct  # noqa: PLC0415
+
+        raw_p, prompt_truncated = shrink_raw_edit_prompt(
+            tokenizer,
+            raw_prompt,
+            raw_completion,
+            max_seq_len,
+        )
+        parts = format_llama_instruct(raw_p, raw_completion)
+        prompt, completion = parts["prompt"], parts["completion"]
+    else:
+        prompt, completion = raw_p, raw_completion
+
+    ids, label, meta = tokenize_sft_example(
+        tokenizer,
+        prompt=prompt,
+        completion=completion,
+        max_seq_len=max_seq_len,
+    )
+    combined = SFTTokenizeMeta(
+        prompt_truncated=meta.prompt_truncated or prompt_truncated,
+        completion_truncated=meta.completion_truncated,
+    )
+    return ids, label, combined
+
+
 def _decode_prompt_ids(tokenizer: Any, prompt_ids: list[int]) -> str:
     if hasattr(tokenizer, "decode"):
         return tokenizer.decode(prompt_ids, skip_special_tokens=False)

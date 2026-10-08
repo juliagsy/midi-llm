@@ -11,8 +11,8 @@ from typing import Any
 from midi_llm.config import load_config
 from midi_llm.config_helpers import cap_s3_max_steps, resolve_s3_grad_accum_steps
 from midi_llm.reproducibility import set_global_seed
-from midi_llm.train.dataset import SFTJsonlDataset, format_llama_instruct, load_sft_records
-from midi_llm.train.sft_tokenize import SFTExampleUnfit, tokenize_sft_example
+from midi_llm.train.dataset import SFTJsonlDataset, load_sft_records
+from midi_llm.train.sft_tokenize import SFTExampleUnfit, tokenize_sft_record
 from midi_llm.train.shard_meta import resolve_repr_name
 from midi_llm.train.shard_paths import infer_validation_shard
 
@@ -50,29 +50,27 @@ def filter_sft_records_for_seq_len(
     *,
     max_seq_len: int,
     chat_template: bool = True,
-    require_full_fit: bool = True,
+    require_full_completion: bool = True,
 ) -> tuple[list[dict[str, Any]], int, int]:
-    """Drop rows that cannot fit ``max_seq_len`` with the edit instruction preserved."""
+    """Drop rows that cannot fit ``max_seq_len`` (shard rows use raw edit prompts)."""
     kept: list[dict[str, Any]] = []
     skipped_unfit = 0
     skipped_truncated = 0
     for record in records:
-        prompt = record.get("prompt", "")
-        completion = record.get("completion", "")
-        if chat_template:
-            parts = format_llama_instruct(prompt, completion)
-            prompt, completion = parts["prompt"], parts["completion"]
+        raw_prompt = record.get("prompt", "")
+        raw_completion = record.get("completion", "")
         try:
-            _ids, _label, meta = tokenize_sft_example(
+            _ids, _label, meta = tokenize_sft_record(
                 tokenizer,
-                prompt=prompt,
-                completion=completion,
+                raw_prompt=raw_prompt,
+                raw_completion=raw_completion,
                 max_seq_len=max_seq_len,
+                chat_template=chat_template,
             )
         except (SFTExampleUnfit, ValueError):
             skipped_unfit += 1
             continue
-        if require_full_fit and (meta.prompt_truncated or meta.completion_truncated):
+        if require_full_completion and meta.completion_truncated:
             skipped_truncated += 1
             continue
         kept.append(record)
@@ -85,11 +83,12 @@ def _tokenize_batch(examples: dict[str, list[str]], tokenizer, max_seq_len: int)
     labels = []
     for prompt, completion in zip(examples["prompt"], examples["completion"], strict=True):
         try:
-            ids, label, _meta = tokenize_sft_example(
+            ids, label, _meta = tokenize_sft_record(
                 tokenizer,
-                prompt=prompt,
-                completion=completion,
+                raw_prompt=prompt,
+                raw_completion=completion,
                 max_seq_len=max_seq_len,
+                chat_template=True,
             )
         except (SFTExampleUnfit, ValueError):
             continue
@@ -191,6 +190,7 @@ def setup_lora_trainer(
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.save_pretrained(out / "tokenizer")
 
     raw_records = load_sft_records(shard_path, max_samples=max_samples)
     filtered_records, n_skipped_unfit, n_skipped_truncated = filter_sft_records_for_seq_len(
@@ -198,7 +198,7 @@ def setup_lora_trainer(
         tokenizer,
         max_seq_len=seq_len,
         chat_template=True,
-        require_full_fit=True,
+        require_full_completion=True,
     )
     if n_skipped_unfit:
         logger.warning(
@@ -237,7 +237,7 @@ def setup_lora_trainer(
             epochs,
         )
 
-    dataset = SFTJsonlDataset(shard_path, chat_template=True, records=filtered_records)
+    dataset = SFTJsonlDataset(shard_path, chat_template=False, records=filtered_records)
 
     val_records: list[dict[str, Any]] | None = None
     val_path = Path(val_shard_path) if val_shard_path else infer_validation_shard(shard_path)
@@ -248,7 +248,7 @@ def setup_lora_trainer(
             tokenizer,
             max_seq_len=seq_len,
             chat_template=True,
-            require_full_fit=True,
+            require_full_completion=True,
         )
         if val_unfit or val_trunc:
             logger.warning(
@@ -263,7 +263,7 @@ def setup_lora_trainer(
 
     eval_dataset = None
     if val_records:
-        eval_dataset = SFTJsonlDataset(val_path, chat_template=True, records=val_records)
+        eval_dataset = SFTJsonlDataset(val_path, chat_template=False, records=val_records)
 
     prec = precision or cfg["model"].get("precision", "bf16")
     use_bf16 = prec == "bf16"
@@ -393,12 +393,22 @@ def setup_lora_trainer(
     return trainer, out, meta
 
 
-def save_lora_artifacts(trainer, output_dir: str | Path, meta: dict[str, Any]) -> Path:
+def save_lora_artifacts(
+    trainer,
+    output_dir: str | Path,
+    meta: dict[str, Any],
+    *,
+    tokenizer: Any | None = None,
+) -> Path:
     """Write ``lora_adapter/``, tokenizer, and ``train_meta.json`` from a Trainer."""
     out = Path(output_dir)
     adapter_dir = out / "lora_adapter"
     trainer.save_model(str(adapter_dir))
-    trainer.tokenizer.save_pretrained(out / "tokenizer")
+    tok = tokenizer
+    if tok is None:
+        tok = getattr(trainer, "processing_class", None) or getattr(trainer, "tokenizer", None)
+    if tok is not None and not (out / "tokenizer").is_dir():
+        tok.save_pretrained(out / "tokenizer")
     payload = {
         **meta,
         "saved_global_step": int(getattr(trainer.state, "global_step", 0)),
