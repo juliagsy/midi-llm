@@ -116,16 +116,12 @@ def tokenize_sft_example(
         prompt_truncated=prompt_truncated,
         completion_truncated=completion_truncated,
     )
-    if completion_truncated:
-        logger.warning(
-            "SFT completion truncated to fit max_seq_len=%s (prompt_truncated=%s)",
+    if completion_truncated or prompt_truncated:
+        logger.debug(
+            "SFT truncated to fit max_seq_len=%s (prompt=%s completion=%s)",
             max_seq_len,
             prompt_truncated,
-        )
-    elif prompt_truncated:
-        logger.warning(
-            "SFT prompt truncated from the left to fit max_seq_len=%s",
-            max_seq_len,
+            completion_truncated,
         )
 
     return ids, label, meta

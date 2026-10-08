@@ -49,10 +49,12 @@ def filter_sft_records_for_seq_len(
     *,
     max_seq_len: int,
     chat_template: bool = True,
-) -> tuple[list[dict[str, Any]], int]:
+    require_full_fit: bool = True,
+) -> tuple[list[dict[str, Any]], int, int]:
     """Drop rows that cannot fit ``max_seq_len`` with the edit instruction preserved."""
     kept: list[dict[str, Any]] = []
-    skipped = 0
+    skipped_unfit = 0
+    skipped_truncated = 0
     for record in records:
         prompt = record.get("prompt", "")
         completion = record.get("completion", "")
@@ -60,17 +62,20 @@ def filter_sft_records_for_seq_len(
             parts = format_llama_instruct(prompt, completion)
             prompt, completion = parts["prompt"], parts["completion"]
         try:
-            tokenize_sft_example(
+            _ids, _label, meta = tokenize_sft_example(
                 tokenizer,
                 prompt=prompt,
                 completion=completion,
                 max_seq_len=max_seq_len,
             )
         except (SFTExampleUnfit, ValueError):
-            skipped += 1
+            skipped_unfit += 1
+            continue
+        if require_full_fit and (meta.prompt_truncated or meta.completion_truncated):
+            skipped_truncated += 1
             continue
         kept.append(record)
-    return kept, skipped
+    return kept, skipped_unfit, skipped_truncated
 
 
 def _tokenize_batch(examples: dict[str, list[str]], tokenizer, max_seq_len: int) -> dict[str, Any]:
@@ -180,16 +185,24 @@ def setup_lora_trainer(
         tokenizer.pad_token = tokenizer.eos_token
 
     raw_records = load_sft_records(shard_path, max_samples=max_samples)
-    filtered_records, n_skipped = filter_sft_records_for_seq_len(
+    filtered_records, n_skipped_unfit, n_skipped_truncated = filter_sft_records_for_seq_len(
         raw_records,
         tokenizer,
         max_seq_len=seq_len,
         chat_template=True,
+        require_full_fit=True,
     )
-    if n_skipped:
+    if n_skipped_unfit:
         logger.warning(
-            "Dropped %s/%s SFT rows that exceed max_seq_len=%s (instruction + completion must fit)",
-            n_skipped,
+            "Dropped %s/%s SFT rows (unfit at max_seq_len=%s)",
+            n_skipped_unfit,
+            len(raw_records),
+            seq_len,
+        )
+    if n_skipped_truncated:
+        logger.warning(
+            "Dropped %s/%s SFT rows (prompt/completion truncated at max_seq_len=%s)",
+            n_skipped_truncated,
             len(raw_records),
             seq_len,
         )
@@ -203,7 +216,11 @@ def setup_lora_trainer(
     prec = precision or cfg["model"].get("precision", "bf16")
     use_bf16 = prec == "bf16"
     dtype = torch.bfloat16 if use_bf16 else torch.float16
-    model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=dtype)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        torch_dtype=dtype,
+        low_cpu_mem_usage=True,
+    )
     model.config.use_cache = False
 
     peft_config = LoraConfig(
@@ -215,12 +232,25 @@ def setup_lora_trainer(
         bias="none",
     )
     model = get_peft_model(model, peft_config)
+    if hasattr(model, "enable_input_require_grads"):
+        model.enable_input_require_grads()
+    if hasattr(model, "gradient_checkpointing_enable"):
+        model.gradient_checkpointing_enable(
+            gradient_checkpointing_kwargs={"use_reentrant": False},
+        )
 
     warmup_kwargs = _warmup_scheduler_kwargs(
         TrainingArguments,
         warmup_ratio=float(cfg["training"]["warmup_ratio"]),
         max_steps=steps,
     )
+    ta_params = inspect.signature(TrainingArguments.__init__).parameters
+    extra_ta: dict[str, Any] = {}
+    if "gradient_checkpointing" in ta_params:
+        extra_ta["gradient_checkpointing"] = True
+    if "dataloader_pin_memory" in ta_params:
+        extra_ta["dataloader_pin_memory"] = False
+
     args = TrainingArguments(
         output_dir=str(out),
         max_steps=steps,
@@ -238,6 +268,16 @@ def setup_lora_trainer(
         data_seed=train_seed,
         report_to=[],
         remove_unused_columns=False,
+        **extra_ta,
+    )
+
+    logger.info(
+        "LoRA SFT: seq_len=%s batch=%s grad_accum=%s train_rows=%s (from %s shard rows)",
+        seq_len,
+        per_device_batch_size,
+        grad_accum,
+        len(filtered_records),
+        len(raw_records),
     )
 
     trainer = Trainer(
@@ -256,7 +296,8 @@ def setup_lora_trainer(
         "precision": prec,
         "gradient_accumulation_steps": grad_accum,
         "sft_rows_kept": len(filtered_records),
-        "sft_rows_skipped_seq_len": n_skipped,
+        "sft_rows_skipped_unfit": n_skipped_unfit,
+        "sft_rows_skipped_truncated": n_skipped_truncated,
     }
     return trainer, out, meta
 

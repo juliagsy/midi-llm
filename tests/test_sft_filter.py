@@ -20,14 +20,14 @@ def test_filter_drops_unfit_rows() -> None:
     )
     long = {"prompt": long_prompt, "completion": "1 2 3 4 5 6 7 8 9 0"}
 
-    kept, skipped = filter_sft_records_for_seq_len(
+    kept, skipped_unfit, skipped_truncated = filter_sft_records_for_seq_len(
         [short, long],
         tokenizer,
         max_seq_len=64,
         chat_template=False,
     )
     assert len(kept) == 1
-    assert skipped == 1
+    assert skipped_unfit + skipped_truncated == 1
     assert kept[0] is short
 
 
@@ -35,11 +35,12 @@ def test_unfit_is_skipped_not_raised_in_filter() -> None:
     tokenizer = _FakeTokenizer()
     prompt = "### Task\nEdit\n\n### Instruction\nTranspose up.\n\n" + ("m" * 200)
     records = [{"prompt": prompt, "completion": "out"}]
-    kept, skipped = filter_sft_records_for_seq_len(
+    kept, skipped_unfit, skipped_truncated = filter_sft_records_for_seq_len(
         records, tokenizer, max_seq_len=64, chat_template=False
     )
     assert kept == []
-    assert skipped == 1
+    assert skipped_unfit == 1
+    assert skipped_truncated == 0
     with pytest.raises(SFTExampleUnfit):
         tokenize_sft_example(
             tokenizer, prompt=prompt, completion="out", max_seq_len=64
